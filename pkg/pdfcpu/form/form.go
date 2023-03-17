@@ -20,13 +20,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/bookreport/pdfcpu/pkg/log"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/draw"
+	pdffont "github.com/bookreport/pdfcpu/pkg/pdfcpu/font"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/model"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/primitives"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/types"
 	"github.com/mattn/go-runewidth"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/draw"
-	pdffont "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/font"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/primitives"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 	"github.com/pkg/errors"
 )
 

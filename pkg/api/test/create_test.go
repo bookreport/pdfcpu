@@ -21,13 +21,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	pdf "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/draw"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/bookreport/pdfcpu/pkg/api"
+	pdf "github.com/bookreport/pdfcpu/pkg/pdfcpu"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/color"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/draw"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/model"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/types"
 )
 
 var sampleText string = `MOST of the adventures recorded in this book really occurred; one or

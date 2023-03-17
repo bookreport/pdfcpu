@@ -23,10 +23,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/draw"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/bookreport/pdfcpu/pkg/log"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/draw"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/model"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/types"
 )
 
 func listImages(ctx *model.Context, mm []map[int]model.Image, maxLenObjNr, maxLenID, maxLenSize, maxLenFilters int) ([]string, int, int64, error) {

@@ -20,8 +20,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/model"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/types"
 )
 
 // PropertiesList returns a list of document properties as recorded in the document info dict.

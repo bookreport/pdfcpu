@@ -22,12 +22,12 @@ import (
 	"io"
 	"math"
 
-	"github.com/pdfcpu/pdfcpu/pkg/filter"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/draw"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/matrix"
+	"github.com/bookreport/pdfcpu/pkg/filter"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/color"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/draw"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/matrix"
 
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/types"
 	"github.com/pkg/errors"
 )
 

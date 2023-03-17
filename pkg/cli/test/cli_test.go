@@ -23,10 +23,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pdfcpu/pdfcpu/pkg/api"
-	"github.com/pdfcpu/pdfcpu/pkg/cli"
-	"github.com/pdfcpu/pdfcpu/pkg/log"
-	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/bookreport/pdfcpu/pkg/api"
+	"github.com/bookreport/pdfcpu/pkg/cli"
+	"github.com/bookreport/pdfcpu/pkg/log"
+	"github.com/bookreport/pdfcpu/pkg/pdfcpu/model"
 )
 
 var inDir, outDir, resDir, fontDir, samplesDir string
