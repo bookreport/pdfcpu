@@ -52,13 +52,17 @@ func decodeFileSpecStreamDict(sd *types.StreamDict, id string) error {
 
 	// Ignore filter chains with length > 1
 	if len(fpl) > 1 {
-		log.Debug.Printf("decodedFileSpecStreamDict: ignore %s, more than 1 filter.\n", id)
+		if log.DebugEnabled() {
+			log.Debug.Printf("decodedFileSpecStreamDict: ignore %s, more than 1 filter.\n", id)
+		}
 		return nil
 	}
 
 	// Only FlateDecode supported.
 	if fpl[0].Name != filter.Flate {
-		log.Debug.Printf("decodedFileSpecStreamDict: ignore %s, %s filter unsupported.\n", id, fpl[0].Name)
+		if log.DebugEnabled() {
+			log.Debug.Printf("decodedFileSpecStreamDict: ignore %s, %s filter unsupported.\n", id, fpl[0].Name)
+		}
 		return nil
 	}
 
@@ -66,20 +70,18 @@ func decodeFileSpecStreamDict(sd *types.StreamDict, id string) error {
 	return sd.Decode()
 }
 
-func fileSpectStreamFileName(xRefTable *XRefTable, d types.Dict) (string, error) {
+func fileSpecStreamFileName(xRefTable *XRefTable, d types.Dict) (string, error) {
 	o, found := d.Find("UF")
 	if found {
-		fileName, err := xRefTable.DereferenceStringOrHexLiteral(o, V10, nil)
-		return fileName, err
+		return xRefTable.DereferenceStringOrHexLiteral(o, V10, nil)
 	}
 
 	o, found = d.Find("F")
-	if !found {
-		return "", errors.New("")
+	if found {
+		return xRefTable.DereferenceStringOrHexLiteral(o, V10, nil)
 	}
 
-	fileName, err := xRefTable.DereferenceStringOrHexLiteral(o, V10, nil)
-	return fileName, err
+	return "", errors.New("fileSpecStream missing \"UF\",\"F\"")
 }
 
 func fileSpecStreamDict(xRefTable *XRefTable, d types.Dict) (*types.StreamDict, error) {
@@ -105,7 +107,7 @@ func fileSpecStreamDict(xRefTable *XRefTable, d types.Dict) (*types.StreamDict, 
 }
 
 // NewFileSpectDictForAttachment returns a fileSpecDict for a.
-func (xRefTable *XRefTable) NewFileSpectDictForAttachment(a Attachment) (*types.IndirectRef, error) {
+func (xRefTable *XRefTable) NewFileSpecDictForAttachment(a Attachment) (types.Dict, error) {
 	modTime := time.Now()
 	if a.ModTime != nil {
 		modTime = *a.ModTime
@@ -115,12 +117,9 @@ func (xRefTable *XRefTable) NewFileSpectDictForAttachment(a Attachment) (*types.
 		return nil, err
 	}
 
-	d, err := xRefTable.NewFileSpecDict(a.ID, types.EncodeUTF16String(a.ID), a.Desc, *sd)
-	if err != nil {
-		return nil, err
-	}
+	// TODO insert (escaped) reverse solidus before solidus between file name components.
 
-	return xRefTable.IndRefForNewObject(d)
+	return xRefTable.NewFileSpecDict(a.ID, a.ID, a.Desc, *sd)
 }
 
 func fileSpecStreamDictInfo(xRefTable *XRefTable, id string, o types.Object, decode bool) (*types.StreamDict, string, string, *time.Time, error) {
@@ -138,7 +137,7 @@ func fileSpecStreamDictInfo(xRefTable *XRefTable, id string, o types.Object, dec
 		}
 	}
 
-	fileName, err := fileSpectStreamFileName(xRefTable, d)
+	fileName, err := fileSpecStreamFileName(xRefTable, d)
 	if err != nil {
 		return nil, "", "", nil, err
 	}
@@ -178,9 +177,9 @@ func (ctx *Context) ListAttachments() ([]Attachment, error) {
 
 	aa := []Attachment{}
 
-	createAttachmentStub := func(xRefTable *XRefTable, id string, o types.Object) error {
+	createAttachmentStub := func(xRefTable *XRefTable, id string, o *types.Object) error {
 		decode := false
-		_, desc, fileName, modTime, err := fileSpecStreamDictInfo(xRefTable, id, o, decode)
+		_, desc, fileName, modTime, err := fileSpecStreamDictInfo(xRefTable, id, *o, decode)
 		if err != nil {
 			return err
 		}
@@ -210,12 +209,19 @@ func (ctx *Context) AddAttachment(a Attachment, useCollection bool) error {
 		}
 	}
 
-	ir, err := xRefTable.NewFileSpectDictForAttachment(a)
+	d, err := xRefTable.NewFileSpecDictForAttachment(a)
 	if err != nil {
 		return err
 	}
 
-	return xRefTable.Names["EmbeddedFiles"].Add(xRefTable, types.EncodeUTF16String(a.ID), *ir)
+	ir, err := xRefTable.IndRefForNewObject(d)
+	if err != nil {
+		return err
+	}
+
+	m := NameMap{a.ID: []types.Dict{d}}
+
+	return xRefTable.Names["EmbeddedFiles"].Add(xRefTable, a.ID, *ir, m, []string{"F", "UF"})
 }
 
 var errContentMatch = errors.New("name tree content match")
@@ -228,15 +234,15 @@ func (ctx *Context) SearchEmbeddedFilesNameTreeNodeByContent(s string) (*string,
 		v types.Object
 	)
 
-	identifyAttachmentStub := func(xRefTable *XRefTable, id string, o types.Object) error {
+	identifyAttachmentStub := func(xRefTable *XRefTable, id string, o *types.Object) error {
 		decode := false
-		_, desc, fileName, _, err := fileSpecStreamDictInfo(xRefTable, id, o, decode)
+		_, desc, fileName, _, err := fileSpecStreamDictInfo(xRefTable, id, *o, decode)
 		if err != nil {
 			return err
 		}
 		if s == fileName || s == desc {
 			k = &id
-			v = o
+			v = *o
 			return errContentMatch
 		}
 		return nil
@@ -254,7 +260,9 @@ func (ctx *Context) SearchEmbeddedFilesNameTreeNodeByContent(s string) (*string,
 }
 
 func (ctx *Context) removeAttachment(id string) (bool, error) {
-	log.CLI.Printf("removing %s\n", id)
+	if log.CLIEnabled() {
+		log.CLI.Printf("removing %s\n", id)
+	}
 	xRefTable := ctx.XRefTable
 	// EmbeddedFiles name tree containing at least one key value pair.
 	empty, ok, err := xRefTable.Names["EmbeddedFiles"].Remove(xRefTable, id)
@@ -274,7 +282,9 @@ func (ctx *Context) removeAttachment(id string) (bool, error) {
 			return false, err
 		}
 		if k == nil {
-			log.CLI.Printf("attachment %s not found", id)
+			if log.CLIEnabled() {
+				log.CLI.Printf("attachment %s not found", id)
+			}
 			return false, nil
 		}
 		empty, _, err = xRefTable.Names["EmbeddedFiles"].Remove(xRefTable, *k)
@@ -306,7 +316,9 @@ func (ctx *Context) RemoveAttachments(ids []string) (bool, error) {
 
 	if len(ids) == 0 {
 		// Remove all attachments - delete name tree root object.
-		log.CLI.Println("removing all attachments")
+		if log.CLIEnabled() {
+			log.CLI.Println("removing all attachments")
+		}
 		if err := xRefTable.RemoveEmbeddedFilesNameTree(); err != nil {
 			return false, err
 		}
@@ -345,9 +357,9 @@ func (ctx *Context) ExtractAttachments(ids []string) ([]Attachment, error) {
 
 	aa := []Attachment{}
 
-	createAttachment := func(xRefTable *XRefTable, id string, o types.Object) error {
+	createAttachment := func(xRefTable *XRefTable, id string, o *types.Object) error {
 		decode := true
-		sd, desc, fileName, modTime, err := fileSpecStreamDictInfo(xRefTable, id, o, decode)
+		sd, desc, fileName, modTime, err := fileSpecStreamDictInfo(xRefTable, id, *o, decode)
 		if err != nil {
 			return err
 		}
@@ -367,13 +379,17 @@ func (ctx *Context) ExtractAttachments(ids []string) ([]Attachment, error) {
 					return nil, err
 				}
 				if k == nil {
-					log.CLI.Printf("attachment %s not found", id)
-					log.Info.Printf("pdfcpu: extractAttachments: %s not found", id)
+					if log.CLIEnabled() {
+						log.CLI.Printf("attachment %s not found", id)
+					}
+					if log.InfoEnabled() {
+						log.Info.Printf("pdfcpu: extractAttachments: %s not found", id)
+					}
 					continue
 				}
 				v = o
 			}
-			if err := createAttachment(ctx.XRefTable, id, v); err != nil {
+			if err := createAttachment(ctx.XRefTable, id, &v); err != nil {
 				return nil, err
 			}
 		}

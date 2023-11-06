@@ -21,20 +21,24 @@ import (
 	"os"
 	"time"
 
-	"github.com/pdfcpu/pdfcpu/pkg/log"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pkg/errors"
 )
 
 // Trim generates a trimmed version of rs
 // containing all selected pages and writes the result to w.
 func Trim(rs io.ReadSeeker, w io.Writer, selectedPages []string, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: Trim: missing rs")
+	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
 	conf.Cmd = model.TRIM
 
 	fromStart := time.Now()
-	ctx, durRead, durVal, durOpt, err := readValidateAndOptimize(rs, conf, fromStart)
+	ctx, durRead, durVal, durOpt, err := ReadValidateAndOptimize(rs, conf, fromStart)
 	if err != nil {
 		return err
 	}
@@ -45,7 +49,7 @@ func Trim(rs io.ReadSeeker, w io.Writer, selectedPages []string, conf *model.Con
 
 	fromWrite := time.Now()
 
-	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, false)
+	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, false, true)
 	if err != nil {
 		return err
 	}
@@ -77,9 +81,9 @@ func TrimFile(inFile, outFile string, selectedPages []string, conf *model.Config
 	tmpFile := inFile + ".tmp"
 	if outFile != "" && inFile != outFile {
 		tmpFile = outFile
-		log.CLI.Printf("writing %s...\n", outFile)
+		logWritingTo(outFile)
 	} else {
-		log.CLI.Printf("writing %s...\n", inFile)
+		logWritingTo(inFile)
 	}
 	if f2, err = os.Create(tmpFile); err != nil {
 		f1.Close()

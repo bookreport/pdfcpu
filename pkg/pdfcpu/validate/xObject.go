@@ -528,7 +528,7 @@ func validateImageStreamDict(xRefTable *model.XRefTable, sd *types.StreamDict, i
 	// SMask, stream, optional, since V1.4
 	sinceVersion := model.V14
 	if xRefTable.ValidationMode == model.ValidationRelaxed {
-		sinceVersion = model.V13
+		sinceVersion = model.V12
 	}
 	sd1, err := validateStreamDictEntry(xRefTable, sd.Dict, dictName, "SMask", OPTIONAL, sinceVersion, nil)
 	if err != nil {
@@ -665,20 +665,22 @@ func validateEntryOPI(xRefTable *model.XRefTable, d types.Dict, dictName, entryN
 func validateFormStreamDictPart2(xRefTable *model.XRefTable, d types.Dict, dictName string) error {
 
 	// PieceInfo, dict, optional, since V1.3
-	hasPieceInfo, err := validatePieceInfo(xRefTable, d, dictName, "PieceInfo", OPTIONAL, model.V13)
-	if err != nil {
-		return err
-	}
+	if xRefTable.ValidationMode != model.ValidationRelaxed {
+		hasPieceInfo, err := validatePieceInfo(xRefTable, d, dictName, "PieceInfo", OPTIONAL, model.V13)
+		if err != nil {
+			return err
+		}
 
-	// LastModified, date, required if PieceInfo present, since V1.3
-	lm, err := validateDateEntry(xRefTable, d, dictName, "LastModified", OPTIONAL, model.V13)
-	if err != nil {
-		return err
-	}
+		// LastModified, date, required if PieceInfo present, since V1.3
+		lm, err := validateDateEntry(xRefTable, d, dictName, "LastModified", OPTIONAL, model.V13)
+		if err != nil {
+			return err
+		}
 
-	if hasPieceInfo && lm == nil {
-		err = errors.New("pdfcpu: validateFormStreamDictPart2: missing \"LastModified\" (required by \"PieceInfo\")")
-		return err
+		if hasPieceInfo && lm == nil {
+			err = errors.New("pdfcpu: validateFormStreamDictPart2: missing \"LastModified\" (required by \"PieceInfo\")")
+			return err
+		}
 	}
 
 	// StructParent, integer

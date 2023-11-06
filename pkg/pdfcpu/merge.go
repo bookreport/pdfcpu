@@ -24,6 +24,157 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
+func EnsureOutlines(ctx *model.Context, fName string, append bool) error {
+
+	rootDict, err := ctx.Catalog()
+	if err != nil {
+		return err
+	}
+
+	if err := ctx.LocateNameTree("Dests", true); err != nil {
+		return err
+	}
+
+	outlinesDict := types.Dict(map[string]types.Object{"Type": types.Name("Outlines")})
+	indRef, err := ctx.IndRefForNewObject(outlinesDict)
+	if err != nil {
+		return err
+	}
+
+	first, last, total, visible, err := createOutlineItemDict(ctx, []Bookmark{{PageFrom: 1, Title: fName}}, indRef, nil)
+	if err != nil {
+		return err
+	}
+
+	outlinesDict["First"] = *first
+	outlinesDict["Last"] = *last
+	outlinesDict["Count"] = types.Integer(total + visible)
+
+	if obj, ok := rootDict.Find("Outlines"); ok {
+		if append {
+			return nil
+		}
+		d, err := ctx.DereferenceDict(obj)
+		if err != nil {
+			return err
+		}
+		count := d.IntEntry("Count")
+		c := 0
+		f, l := d.IndirectRefEntry("First"), d.IndirectRefEntry("Last")
+		for ir := f; ir != nil; ir = d.IndirectRefEntry("Next") {
+			d, err = ctx.DereferenceDict(*ir)
+			if err != nil {
+				return err
+			}
+			d["Parent"] = *first
+			c++
+		}
+		d, err = ctx.DereferenceDict(*first)
+		if err != nil {
+			return err
+		}
+
+		d["First"] = *f
+		d["Last"] = *l
+		if count != nil && *count != 0 {
+			c = *count
+		}
+		d["Count"] = types.Integer(-c)
+	}
+
+	rootDict["Outlines"] = *indRef
+
+	return nil
+}
+
+func mergeOutlines(fName string, p int, ctxSource, ctxDest *model.Context) error {
+
+	rootDictDest, _ := ctxDest.Catalog()
+	indRef := rootDictDest.IndirectRefEntry("Outlines")
+	outlinesDict, err := ctxDest.DereferenceDict(*indRef)
+	if err != nil {
+		return err
+	}
+
+	first, last, _, _, err := createOutlineItemDict(ctxDest, []Bookmark{{PageFrom: p, Title: fName}}, indRef, nil)
+	if err != nil {
+		return err
+	}
+
+	l := outlinesDict.IndirectRefEntry("Last")
+	outlinesDict["Last"] = *last
+
+	topCount := 0
+
+	count := outlinesDict.IntEntry("Count")
+	if count != nil {
+		topCount = *count
+	}
+
+	topCount++
+
+	d1, err := ctxDest.DereferenceDict(*l)
+	if err != nil {
+		return err
+	}
+	d1["Next"] = *last
+
+	d2, err := ctxDest.DereferenceDict(*last)
+	if err != nil {
+		return err
+	}
+	d2["Previous"] = *l
+
+	rootDictSource, err := ctxSource.Catalog()
+	if err != nil {
+		return err
+	}
+
+	if obj, ok := rootDictSource.Find("Outlines"); ok {
+
+		// Integrate existing outlines from ctxSource.
+
+		d, err := ctxDest.DereferenceDict(obj)
+		if err != nil {
+			return err
+		}
+
+		f, l := d.IndirectRefEntry("First"), d.IndirectRefEntry("Last")
+		if f == nil && l == nil {
+			outlinesDict["Count"] = types.Integer(topCount)
+			return nil
+		}
+
+		d2["First"] = *f
+		d2["Last"] = *l
+
+		c := 0
+
+		// Update parents.
+		// TODO Collapse outline dicts.
+		for ir := f; ir != nil; ir = d.IndirectRefEntry("Next") {
+			d, err = ctxDest.DereferenceDict(*ir)
+			if err != nil {
+				return err
+			}
+			d["Parent"] = *first
+
+			i := d.IntEntry("Count")
+			if i != nil && *i > 0 {
+				c += *i
+			}
+
+			c++
+		}
+
+		d2["Count"] = types.Integer(c)
+		topCount += c
+	}
+
+	outlinesDict["Count"] = types.Integer(topCount)
+	return nil
+}
+
 func handleNeedAppearances(ctxSource *model.Context, dSrc, dDest types.Dict) error {
 	o, found := dSrc.Find("NeedAppearances")
 	if !found || o == nil {
@@ -226,7 +377,79 @@ func mergeInFields(ctxDest *model.Context, arrFieldsSrc, arrFieldsDest types.Arr
 	return nil
 }
 
-func mergeAcroForms(ctxSource, ctxDest *model.Context) error {
+func mergeDests(ctxSource, ctxDest *model.Context) error {
+
+	rootDictSource, rootDictDest, err := rootDicts(ctxSource, ctxDest)
+	if err != nil {
+		return err
+	}
+
+	o1, found := rootDictSource.Find("Dests")
+	if !found {
+		return nil
+	}
+
+	o2, found := rootDictDest.Find("Dests")
+	if !found {
+		rootDictDest["Dests"] = o1
+		return nil
+	}
+
+	destsSrc, err := ctxSource.DereferenceDict(o1)
+	if err != nil {
+		return err
+	}
+
+	destsDest, err := ctxDest.DereferenceDict(o2)
+	if err != nil {
+		return err
+	}
+
+	// Note: We ignore duplicate keys
+	for k, v := range destsSrc {
+		destsDest[k] = v
+	}
+
+	return nil
+}
+
+func mergeNames(ctxSrc, ctxDest *model.Context) error {
+
+	rootDictSrc, rootDictDest, err := rootDicts(ctxSrc, ctxDest)
+	if err != nil {
+		return err
+	}
+
+	_, found := rootDictSrc.Find("Names")
+	if !found {
+		// Nothing to merge in.
+		return nil
+	}
+
+	if _, found := rootDictDest.Find("Names"); !found {
+		ctxDest.Names = ctxSrc.Names
+		return nil
+	}
+
+	// We need to merge src Names into dest Names.
+
+	for id, namesSrc := range ctxSrc.Names {
+		if namesDest, ok := ctxDest.Names[id]; ok {
+			// Merge src tree into dest tree including collision detection.
+			if err := namesDest.AddTree(ctxDest.XRefTable, namesSrc, ctxSrc.NameRefs[id], []string{"D", "Dest"}); err != nil {
+				return err
+			}
+			continue
+		}
+
+		// Name tree missing in dest ctx => copy over names from src ctx
+		ctxDest.Names[id] = namesSrc
+	}
+
+	return nil
+}
+
+func mergeForms(ctxSource, ctxDest *model.Context) error {
 
 	rootDictSource, rootDictDest, err := rootDicts(ctxSource, ctxDest)
 	if err != nil {
@@ -243,7 +466,7 @@ func mergeAcroForms(ctxSource, ctxDest *model.Context) error {
 		return err
 	}
 
-	// Retrieve ctxSrc AcroForm Fields
+	// Retrieve ctxSrc Form Fields
 	o, found = dSrc.Find("Fields")
 	if !found {
 		return nil
@@ -256,7 +479,7 @@ func mergeAcroForms(ctxSource, ctxDest *model.Context) error {
 		return nil
 	}
 
-	// We have a ctxSrc.Acroform with fields.
+	// We have a ctxSrc.Form with fields.
 
 	o, found = rootDictDest.Find("AcroForm")
 	if !found {
@@ -302,8 +525,9 @@ func patchIndRef(ir *types.IndirectRef, lookup map[int]int) {
 }
 
 func patchObject(o types.Object, lookup map[int]int) types.Object {
-
-	log.Trace.Printf("patchObject before: %v\n", o)
+	if log.TraceEnabled() {
+		log.Trace.Printf("patchObject before: %v\n", o)
+	}
 
 	var ob types.Object
 
@@ -330,19 +554,22 @@ func patchObject(o types.Object, lookup map[int]int) types.Object {
 		ob = obj
 
 	case types.Array:
-		patchArray(obj, lookup)
+		patchArray(&obj, lookup)
 		ob = obj
 
 	}
 
-	log.Trace.Printf("patchObject end: %v\n", ob)
+	if log.TraceEnabled() {
+		log.Trace.Printf("patchObject end: %v\n", ob)
+	}
 
 	return ob
 }
 
 func patchDict(d types.Dict, lookup map[int]int) {
-
-	log.Trace.Printf("patchDict before: %v\n", d)
+	if log.TraceEnabled() {
+		log.Trace.Printf("patchDict before: %v\n", d)
+	}
 
 	for k, obj := range d {
 		o := patchObject(obj, lookup)
@@ -351,21 +578,26 @@ func patchDict(d types.Dict, lookup map[int]int) {
 		}
 	}
 
-	log.Trace.Printf("patchDict after: %v\n", d)
+	if log.TraceEnabled() {
+		log.Trace.Printf("patchDict after: %v\n", d)
+	}
 }
 
-func patchArray(a types.Array, lookup map[int]int) {
+func patchArray(a *types.Array, lookup map[int]int) {
+	if log.TraceEnabled() {
+		log.Trace.Printf("patchArray begin: %v\n", *a)
+	}
 
-	log.Trace.Printf("patchArray begin: %v\n", a)
-
-	for i, obj := range a {
+	for i, obj := range *a {
 		o := patchObject(obj, lookup)
 		if o != nil {
-			a[i] = o
+			(*a)[i] = o
 		}
 	}
 
-	log.Trace.Printf("patchArray end: %v\n", a)
+	if log.TraceEnabled() {
+		log.Trace.Printf("patchArray end: %v\n", a)
+	}
 }
 
 func objNrsIntSet(ctx *model.Context) types.IntSet {
@@ -409,10 +641,21 @@ func patchObjects(s types.IntSet, lookup map[int]int) types.IntSet {
 	return t
 }
 
-func patchSourceObjectNumbers(ctxSource, ctxDest *model.Context) {
+func patchNameTree(n *model.Node, lookup map[int]int) error {
 
-	log.Debug.Printf("patchSourceObjectNumbers: ctxSource: xRefTableSize:%d trailer.Size:%d - %s\n", len(ctxSource.Table), *ctxSource.Size, ctxSource.Read.FileName)
-	log.Debug.Printf("patchSourceObjectNumbers:   ctxDest: xRefTableSize:%d trailer.Size:%d - %s\n", len(ctxDest.Table), *ctxDest.Size, ctxDest.Read.FileName)
+	patchValues := func(xRefTable *model.XRefTable, k string, v *types.Object) error {
+		*v = patchObject(*v, lookup)
+		return nil
+	}
+
+	return n.Process(nil, patchValues)
+}
+
+func patchSourceObjectNumbers(ctxSource, ctxDest *model.Context) {
+	if log.DebugEnabled() {
+		log.Debug.Printf("patchSourceObjectNumbers: ctxSource: xRefTableSize:%d trailer.Size:%d - %s\n", len(ctxSource.Table), *ctxSource.Size, ctxSource.Read.FileName)
+		log.Debug.Printf("patchSourceObjectNumbers:   ctxDest: xRefTableSize:%d trailer.Size:%d - %s\n", len(ctxDest.Table), *ctxDest.Size, ctxDest.Read.FileName)
+	}
 
 	// Patch source xref tables obj numbers which are essentially the keys.
 	//logInfoMerge.Printf("Source XRefTable before:\n%s\n", ctxSource)
@@ -447,14 +690,18 @@ func patchSourceObjectNumbers(ctxSource, ctxDest *model.Context) {
 		entry := ctxSource.Table[k]
 
 		if entry.Free {
-			log.Debug.Printf("patch free entry: old offset:%d\n", *entry.Offset)
+			if log.DebugEnabled() {
+				log.Debug.Printf("patch free entry: old offset:%d\n", *entry.Offset)
+			}
 			off := int(*entry.Offset)
 			if off == 0 {
 				continue
 			}
 			i := int64(lookup[off])
 			entry.Offset = &i
-			log.Debug.Printf("patch free entry: new offset:%d\n", *entry.Offset)
+			if log.DebugEnabled() {
+				log.Debug.Printf("patch free entry: new offset:%d\n", *entry.Offset)
+			}
 			continue
 		}
 
@@ -465,7 +712,6 @@ func patchSourceObjectNumbers(ctxSource, ctxDest *model.Context) {
 	m := make(map[int]*model.XRefTableEntry, *ctxSource.Size)
 	for k, v := range lookup {
 		m[v] = ctxSource.Table[k]
-		//*ctxSource.Size++ // ?
 	}
 	m[0] = ctxSource.Table[0]
 	ctxSource.Table = m
@@ -482,12 +728,20 @@ func patchSourceObjectNumbers(ctxSource, ctxDest *model.Context) {
 	// Patch object stream object numbers.
 	ctxSource.Read.ObjectStreams = patchObjects(ctxSource.Read.ObjectStreams, lookup)
 
-	log.Debug.Printf("patchSourceObjectNumbers end")
+	// Patch cached name trees.
+	for _, v := range ctxSource.Names {
+		patchNameTree(v, lookup)
+	}
+
+	if log.DebugEnabled() {
+		log.Debug.Printf("patchSourceObjectNumbers end")
+	}
 }
 
 func appendSourcePageTreeToDestPageTree(ctxSource, ctxDest *model.Context) error {
-
-	log.Debug.Println("appendSourcePageTreeToDestPageTree begin")
+	if log.DebugEnabled() {
+		log.Debug.Println("appendSourcePageTreeToDestPageTree begin")
+	}
 
 	indRefPageTreeRootDictSource, err := ctxSource.Pages()
 	if err != nil {
@@ -506,27 +760,34 @@ func appendSourcePageTreeToDestPageTree(ctxSource, ctxDest *model.Context) error
 	pageCountDest := pageTreeRootDictDest.IntEntry("Count")
 
 	a := pageTreeRootDictDest.ArrayEntry("Kids")
-	log.Debug.Printf("Kids before: %v\n", a)
+	if log.DebugEnabled() {
+		log.Debug.Printf("Kids before: %v\n", a)
+	}
 
 	pageTreeRootDictSource.Insert("Parent", *indRefPageTreeRootDictDest)
 
 	// The source page tree gets appended on to the dest page tree.
 	a = append(a, *indRefPageTreeRootDictSource)
-	log.Debug.Printf("Kids after: %v\n", a)
+	if log.DebugEnabled() {
+		log.Debug.Printf("Kids after: %v\n", a)
+	}
 
 	pageTreeRootDictDest.Update("Count", types.Integer(*pageCountDest+*pageCountSource))
 	pageTreeRootDictDest.Update("Kids", a)
 
 	ctxDest.PageCount += ctxSource.PageCount
 
-	log.Debug.Println("appendSourcePageTreeToDestPageTree end")
+	if log.DebugEnabled() {
+		log.Debug.Println("appendSourcePageTreeToDestPageTree end")
+	}
 
 	return nil
 }
 
 func appendSourceObjectsToDest(ctxSource, ctxDest *model.Context) {
-
-	log.Debug.Println("appendSourceObjectsToDest begin")
+	if log.DebugEnabled() {
+		log.Debug.Println("appendSourceObjectsToDest begin")
+	}
 
 	for objNr, entry := range ctxSource.Table {
 
@@ -535,7 +796,9 @@ func appendSourceObjectsToDest(ctxSource, ctxDest *model.Context) {
 			continue
 		}
 
-		log.Debug.Printf("adding obj %d from src to dest\n", objNr)
+		if log.DebugEnabled() {
+			log.Debug.Printf("adding obj %d from src to dest\n", objNr)
+		}
 
 		ctxDest.Table[objNr] = entry
 
@@ -543,7 +806,9 @@ func appendSourceObjectsToDest(ctxSource, ctxDest *model.Context) {
 
 	}
 
-	log.Debug.Println("appendSourceObjectsToDest end")
+	if log.DebugEnabled() {
+		log.Debug.Println("appendSourceObjectsToDest end")
+	}
 }
 
 // merge two disjunct IntSets
@@ -554,35 +819,60 @@ func mergeIntSets(src, dest types.IntSet) {
 }
 
 func mergeDuplicateObjNumberIntSets(ctxSource, ctxDest *model.Context) {
-
-	log.Debug.Println("mergeDuplicateObjNumberIntSets begin")
+	if log.DebugEnabled() {
+		log.Debug.Println("mergeDuplicateObjNumberIntSets begin")
+	}
 
 	mergeIntSets(ctxSource.Optimize.DuplicateInfoObjects, ctxDest.Optimize.DuplicateInfoObjects)
 	mergeIntSets(ctxSource.LinearizationObjs, ctxDest.LinearizationObjs)
 	mergeIntSets(ctxSource.Read.XRefStreams, ctxDest.Read.XRefStreams)
 	mergeIntSets(ctxSource.Read.ObjectStreams, ctxDest.Read.ObjectStreams)
 
-	log.Debug.Println("mergeDuplicateObjNumberIntSets end")
+	if log.DebugEnabled() {
+		log.Debug.Println("mergeDuplicateObjNumberIntSets end")
+	}
 }
 
 // MergeXRefTables merges Context ctxSource into ctxDest by appending its page tree.
-func MergeXRefTables(ctxSource, ctxDest *model.Context) (err error) {
+func MergeXRefTables(fName string, ctxSource, ctxDest *model.Context) (err error) {
 
 	// Sweep over ctxSource cross ref table and ensure valid object numbers in ctxDest's space.
 	patchSourceObjectNumbers(ctxSource, ctxDest)
 
+	pageCount := ctxDest.PageCount
+
 	// Append ctxSource pageTree to ctxDest pageTree.
-	log.Debug.Println("appendSourcePageTreeToDestPageTree")
+	if log.DebugEnabled() {
+		log.Debug.Println("appendSourcePageTreeToDestPageTree")
+	}
 	err = appendSourcePageTreeToDestPageTree(ctxSource, ctxDest)
 	if err != nil {
 		return err
 	}
 
 	// Append ctxSource objects to ctxDest
-	log.Debug.Println("appendSourceObjectsToDest")
+	if log.DebugEnabled() {
+		log.Debug.Println("appendSourceObjectsToDest")
+	}
 	appendSourceObjectsToDest(ctxSource, ctxDest)
 
-	mergeAcroForms(ctxSource, ctxDest)
+	if err := mergeForms(ctxSource, ctxDest); err != nil {
+		return err
+	}
+
+	if err := mergeDests(ctxSource, ctxDest); err != nil {
+		return err
+	}
+
+	if err := mergeNames(ctxSource, ctxDest); err != nil {
+		return err
+	}
+
+	if ctxDest.Configuration.CreateBookmarks {
+		if err := mergeOutlines(fName, pageCount+1, ctxSource, ctxDest); err != nil {
+			return err
+		}
+	}
 
 	// Mark source's root object as free.
 	err = ctxDest.FreeObject(int(ctxSource.Root.ObjectNumber))
@@ -600,10 +890,16 @@ func MergeXRefTables(ctxSource, ctxDest *model.Context) (err error) {
 	}
 
 	// Merge all IntSets containing redundant object numbers.
-	log.Debug.Println("mergeDuplicateObjNumberIntSets")
+
+	if log.DebugEnabled() {
+		log.Debug.Println("mergeDuplicateObjNumberIntSets")
+	}
+
 	mergeDuplicateObjNumberIntSets(ctxSource, ctxDest)
 
-	log.Info.Printf("Dest XRefTable after merge:\n%s\n", ctxDest)
+	if log.InfoEnabled() {
+		log.Info.Printf("Dest XRefTable after merge:\n%s\n", ctxDest)
+	}
 
 	return nil
 }

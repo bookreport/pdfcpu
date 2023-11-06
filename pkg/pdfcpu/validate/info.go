@@ -122,6 +122,9 @@ func validateDocInfoDictEntry(xRefTable *model.XRefTable, k string, v types.Obje
 	// date, optional
 	case "CreationDate":
 		xRefTable.CreationDate, err = validateInfoDictDate(xRefTable, v)
+		if err != nil && xRefTable.ValidationMode == model.ValidationRelaxed {
+			err = nil
+		}
 
 	// date, required if PieceInfo is present in document catalog.
 	case "ModDate":
@@ -177,7 +180,9 @@ func validateDocumentInfoObject(xRefTable *model.XRefTable) error {
 		return nil
 	}
 
-	log.Validate.Println("*** validateDocumentInfoObject begin ***")
+	if log.ValidateEnabled() {
+		log.Validate.Println("*** validateDocumentInfoObject begin ***")
+	}
 
 	hasModDate, err := validateDocumentInfoDict(xRefTable, *xRefTable.Info)
 	if err != nil {
@@ -193,7 +198,9 @@ func validateDocumentInfoObject(xRefTable *model.XRefTable) error {
 		return errors.Errorf("validateDocumentInfoObject: missing required entry \"ModDate\"")
 	}
 
-	log.Validate.Println("*** validateDocumentInfoObject end ***")
+	if log.ValidateEnabled() {
+		log.Validate.Println("*** validateDocumentInfoObject end ***")
+	}
 
 	return nil
 }

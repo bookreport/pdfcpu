@@ -59,7 +59,7 @@ func ChangeOwnerPassword(cmd *Command) ([]string, error) {
 
 // ListPermissions of inFile.
 func ListPermissions(cmd *Command) ([]string, error) {
-	return api.ListPermissionsFile(*cmd.InFile, cmd.Conf)
+	return ListPermissionsFile(*cmd.InFile, cmd.Conf)
 }
 
 // SetPermissions of inFile.
@@ -69,7 +69,7 @@ func SetPermissions(cmd *Command) ([]string, error) {
 
 // Split inFile into single page PDFs and write result files to outDir.
 func Split(cmd *Command) ([]string, error) {
-	return nil, api.SplitFile(*cmd.InFile, *cmd.OutDir, cmd.Span, cmd.Conf)
+	return nil, api.SplitFile(*cmd.InFile, *cmd.OutDir, cmd.IntVal, cmd.Conf)
 }
 
 // Trim inFile and write result to outFile.
@@ -79,7 +79,7 @@ func Trim(cmd *Command) ([]string, error) {
 
 // Rotate selected pages of inFile and write result to outFile.
 func Rotate(cmd *Command) ([]string, error) {
-	return nil, api.RotateFile(*cmd.InFile, *cmd.OutFile, cmd.Rotation, cmd.PageSelection, cmd.Conf)
+	return nil, api.RotateFile(*cmd.InFile, *cmd.OutFile, cmd.IntVal, cmd.PageSelection, cmd.Conf)
 }
 
 // AddWatermarks adds watermarks or stamps to selected pages of inFile and writes the result to outFile.
@@ -160,7 +160,7 @@ func ExtractMetadata(cmd *Command) ([]string, error) {
 
 // ListAttachments returns a list of embedded file attachments for inFile.
 func ListAttachments(cmd *Command) ([]string, error) {
-	return api.ListAttachmentsFile(*cmd.InFile, cmd.Conf)
+	return ListAttachmentsFile(*cmd.InFile, cmd.Conf)
 }
 
 // AddAttachments embeds inFiles into a PDF context read from inFile and writes the result to outFile.
@@ -178,9 +178,9 @@ func ExtractAttachments(cmd *Command) ([]string, error) {
 	return nil, api.ExtractAttachmentsFile(*cmd.InFile, *cmd.OutDir, cmd.InFiles, cmd.Conf)
 }
 
-// Info gathers information about inFile and returns the result as []string.
-func Info(cmd *Command) ([]string, error) {
-	return api.InfoFile(*cmd.InFile, cmd.PageSelection, cmd.Conf)
+// ListInfo gathers information about inFile and returns the result as []string.
+func ListInfo(cmd *Command) ([]string, error) {
+	return ListInfoFiles(cmd.InFiles, cmd.PageSelection, cmd.BoolVal, cmd.Conf)
 }
 
 // CreateCheatSheetsFonts creates single page PDF cheat sheets for user fonts in current dir.
@@ -200,7 +200,7 @@ func InstallFonts(cmd *Command) ([]string, error) {
 
 // ListKeywords returns a list of keywords for inFile.
 func ListKeywords(cmd *Command) ([]string, error) {
-	return api.ListKeywordsFile(*cmd.InFile, cmd.Conf)
+	return ListKeywordsFile(*cmd.InFile, cmd.Conf)
 }
 
 // AddKeywords adds keywords to inFile's document info dict and writes the result to outFile.
@@ -215,7 +215,7 @@ func RemoveKeywords(cmd *Command) ([]string, error) {
 
 // ListProperties returns inFile's properties.
 func ListProperties(cmd *Command) ([]string, error) {
-	return api.ListPropertiesFile(*cmd.InFile, cmd.Conf)
+	return ListPropertiesFile(*cmd.InFile, cmd.Conf)
 }
 
 // AddProperties adds properties to inFile's document info dict and writes the result to outFile.
@@ -235,7 +235,7 @@ func Collect(cmd *Command) ([]string, error) {
 
 // ListBoxes returns inFile's page boundaries.
 func ListBoxes(cmd *Command) ([]string, error) {
-	return api.ListBoxesFile(*cmd.InFile, cmd.PageSelection, cmd.PageBoundaries, cmd.Conf)
+	return ListBoxesFile(*cmd.InFile, cmd.PageSelection, cmd.PageBoundaries, cmd.Conf)
 }
 
 // AddBoxes adds page boundaries to inFile's page tree and writes the result to outFile.
@@ -255,7 +255,7 @@ func Crop(cmd *Command) ([]string, error) {
 
 // ListAnnotations returns inFile's page annotations.
 func ListAnnotations(cmd *Command) ([]string, error) {
-	_, ss, err := api.ListAnnotationsFile(*cmd.InFile, cmd.PageSelection, cmd.Conf)
+	_, ss, err := ListAnnotationsFile(*cmd.InFile, cmd.PageSelection, cmd.Conf)
 	return ss, err
 }
 
@@ -267,7 +267,7 @@ func RemoveAnnotations(cmd *Command) ([]string, error) {
 
 // ListImages returns inFiles embedded images.
 func ListImages(cmd *Command) ([]string, error) {
-	return api.ListImagesFile(cmd.InFiles, cmd.PageSelection, cmd.Conf)
+	return ListImagesFile(cmd.InFiles, cmd.PageSelection, cmd.Conf)
 }
 
 // Dump known object to stdout.
@@ -277,15 +277,15 @@ func Dump(cmd *Command) ([]string, error) {
 	return nil, api.DumpObjectFile(*cmd.InFile, objNr, hex, cmd.Conf)
 }
 
-// Create renders page content corresponding to declarations found in inJSONFile and writes the result to outFile.
+// Create renders page content corresponding to declarations found in inFileJSON and writes the result to outFile.
 // If inFile is present, page content will be appended,
 func Create(cmd *Command) ([]string, error) {
-	return nil, api.CreateFile(*cmd.InFileJSON, *cmd.InFile, *cmd.OutFile, cmd.Conf)
+	return nil, api.CreateFile(*cmd.InFile, *cmd.InFileJSON, *cmd.OutFile, cmd.Conf)
 }
 
 // ListFormFields returns inFile's form field ids.
 func ListFormFields(cmd *Command) ([]string, error) {
-	return api.ListFormFieldsFile(cmd.InFiles, cmd.Conf)
+	return ListFormFieldsFile(cmd.InFiles, cmd.Conf)
 }
 
 // RemoveFormFields removes some form fields from inFile.
@@ -326,4 +326,39 @@ func MultiFillFormFields(cmd *Command) ([]string, error) {
 // Resize selected pages and write result to outFile.
 func Resize(cmd *Command) ([]string, error) {
 	return nil, api.ResizeFile(*cmd.InFile, *cmd.OutFile, cmd.PageSelection, cmd.Resize, cmd.Conf)
+}
+
+// Create poster for selected pages and write result PDFs into outDir.
+func Poster(cmd *Command) ([]string, error) {
+	return nil, api.PosterFile(*cmd.InFile, *cmd.OutDir, *cmd.OutFile, cmd.PageSelection, cmd.Cut, cmd.Conf)
+}
+
+// NDown selected pages and write result PDFs into outDir.
+func NDown(cmd *Command) ([]string, error) {
+	return nil, api.NDownFile(*cmd.InFile, *cmd.OutDir, *cmd.OutFile, cmd.PageSelection, cmd.IntVal, cmd.Cut, cmd.Conf)
+}
+
+// Cut selected pages and write result PDFs into outDir.
+func Cut(cmd *Command) ([]string, error) {
+	return nil, api.CutFile(*cmd.InFile, *cmd.OutDir, *cmd.OutFile, cmd.PageSelection, cmd.Cut, cmd.Conf)
+}
+
+// ListBookmarks returns inFile's outlines.
+func ListBookmarks(cmd *Command) ([]string, error) {
+	return ListBookmarksFile(*cmd.InFile, cmd.Conf)
+}
+
+// ExportBookmarks returns a representation of inFile's outlines as outFileJSON.
+func ExportBookmarks(cmd *Command) ([]string, error) {
+	return nil, api.ExportBookmarksFile(*cmd.InFile, *cmd.OutFileJSON, cmd.Conf)
+}
+
+// ImportBookmarks creates/replaces outlines of inFile corresponding to declarations found in inJSONFile and writes the result to outFile.
+func ImportBookmarks(cmd *Command) ([]string, error) {
+	return nil, api.ImportBookmarksFile(*cmd.InFile, *cmd.InFileJSON, *cmd.OutFile, cmd.BoolVal, cmd.Conf)
+}
+
+// RemoveBookmarks erases outlines of inFile.
+func RemoveBookmarks(cmd *Command) ([]string, error) {
+	return nil, api.RemoveBookmarksFile(*cmd.InFile, *cmd.OutFile, cmd.Conf)
 }

@@ -17,7 +17,6 @@
 package primitives
 
 import (
-	"bytes"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -403,6 +402,18 @@ func (pdf *PDF) validatePools() error {
 	return pdf.validateFieldGroupPool()
 }
 
+func (pdf *PDF) validateBordersMarginsPaddings() error {
+	if err := pdf.validateBorders(); err != nil {
+		return err
+	}
+
+	if err := pdf.validateMargins(); err != nil {
+		return err
+	}
+
+	return pdf.validatePaddings()
+}
+
 func (pdf *PDF) Validate() error {
 
 	if err := pdf.validatePageBoundaries(); err != nil {
@@ -437,6 +448,10 @@ func (pdf *PDF) Validate() error {
 		pdf.DateFormat = pdf.Conf.DateFormat
 	}
 
+	if len(pdf.Pages) == 0 {
+		return errors.New("pdfcpu: Please supply \"pages\"")
+	}
+
 	// What follows is a quirky way of turning a map of pages into a sorted slice of pages
 	// including entries for pages that are missing in the map.
 
@@ -466,15 +481,7 @@ func (pdf *PDF) Validate() error {
 
 	pdf.pages = pp
 
-	if err := pdf.validateBorders(); err != nil {
-		return err
-	}
-
-	if err := pdf.validateMargins(); err != nil {
-		return err
-	}
-
-	if err := pdf.validatePaddings(); err != nil {
+	if err := pdf.validateBordersMarginsPaddings(); err != nil {
 		return err
 	}
 
@@ -611,6 +618,18 @@ func (pdf *PDF) idForFontName(fontName, fontLang string, pageFonts, globalFonts 
 	return id, nil
 }
 
+func fontIndRef(xRefTable *model.XRefTable, fontName, fontLang string) (*types.IndirectRef, error) {
+	fName := fontName
+	if strings.HasPrefix(fontName, "cjk:") {
+		fName = strings.TrimPrefix(fontName, "cjk:")
+	}
+	if font.IsUserFont(fName) {
+		// Postpone font creation.
+		return xRefTable.IndRefForNewObject(nil)
+	}
+	return pdffont.EnsureFontDict(xRefTable, fName, fontLang, "", false, false, nil)
+}
+
 func (pdf *PDF) ensureFont(fontID, fontName, fontLang string, fonts model.FontMap) (*types.IndirectRef, error) {
 
 	fr, ok := fonts[fontName]
@@ -648,11 +667,8 @@ func (pdf *PDF) ensureFont(fontID, fontName, fontLang string, fonts model.FontMa
 			fName = strings.TrimPrefix(fontName, "cjk:")
 		}
 
-		// TODO Is this used at all?
 		for objNr, fo := range pdf.Optimize.FormFontObjects {
-			//fmt.Printf("searching for %s - obj:%d fontName:%s prefix:%s\n", fontName, objNr, fo.FontName, fo.Prefix)
 			if fName == fo.FontName {
-				//fmt.Println("Match!")
 				indRef = types.NewIndirectRef(objNr, 0)
 				break
 			}
@@ -660,9 +676,7 @@ func (pdf *PDF) ensureFont(fontID, fontName, fontLang string, fonts model.FontMa
 
 		if indRef == nil {
 			for objNr, fo := range pdf.Optimize.FontObjects {
-				//fmt.Printf("searching for %s - obj:%d fontName:%s prefix:%s\n", fontName, objNr, fo.FontName, fo.Prefix)
 				if fontName == fo.FontName {
-					//fmt.Println("Match!")
 					indRef = types.NewIndirectRef(objNr, 0)
 					break
 				}
@@ -671,17 +685,7 @@ func (pdf *PDF) ensureFont(fontID, fontName, fontLang string, fonts model.FontMa
 	}
 
 	if indRef == nil {
-		fName := fontName
-		if strings.HasPrefix(fontName, "cjk:") {
-			fName = strings.TrimPrefix(fontName, "cjk:")
-		}
-		if font.IsUserFont(fName) {
-			// Postpone font creation.
-			indRef, err = pdf.XRefTable.IndRefForNewObject(nil)
-		} else {
-			indRef, err = pdffont.EnsureFontDict(pdf.XRefTable, fName, fontLang, "", false, false, nil)
-		}
-		if err != nil {
+		if indRef, err = fontIndRef(pdf.XRefTable, fontName, fontLang); err != nil {
 			return nil, err
 		}
 	}
@@ -720,11 +724,7 @@ func (pdf *PDF) ensureFormFont(font *FormFont) (string, error) {
 	return id, nil
 }
 
-///////////////////////////////////////////////
-
-func (pdf *PDF) calcInheritedFonts() {
-
-	// Calc top level fonts.
+func (pdf *PDF) calcTopLevelFonts() {
 	for _, f0 := range pdf.Fonts {
 		if f0.Name[0] == '$' {
 			fName := f0.Name[1:]
@@ -747,8 +747,9 @@ func (pdf *PDF) calcInheritedFonts() {
 			}
 		}
 	}
+}
 
-	// Calc inherited page fonts.
+func (pdf *PDF) calcInheritedPageFonts() {
 	for id, f0 := range pdf.Fonts {
 		for _, page := range pdf.pages {
 			if page == nil {
@@ -760,8 +761,9 @@ func (pdf *PDF) calcInheritedFonts() {
 			}
 		}
 	}
+}
 
-	// Calc inherited content fonts.
+func (pdf *PDF) calcInheritedContentFonts() {
 	for _, page := range pdf.pages {
 		if page == nil {
 			continue
@@ -775,6 +777,12 @@ func (pdf *PDF) calcInheritedFonts() {
 		}
 		page.Content.calcFont(ff)
 	}
+}
+
+func (pdf *PDF) calcInheritedFonts() {
+	pdf.calcTopLevelFonts()
+	pdf.calcInheritedPageFonts()
+	pdf.calcInheritedContentFonts()
 }
 
 func (pdf *PDF) calcInheritedMargins() {
@@ -1018,6 +1026,29 @@ func (pdf *PDF) highlightPos(w io.Writer, x, y float64, cBox *types.Rectangle) {
 	draw.DrawHairCross(w, x, y, cBox)
 }
 
+func (pdf *PDF) renderPageBackground(page *PDFPage, w io.Writer) {
+	if page.bgCol == nil {
+		page.bgCol = pdf.bgCol
+	}
+	if page.bgCol != nil {
+		draw.FillRectNoBorder(w, page.cropBox, *page.bgCol)
+	}
+}
+
+func (pdf *PDF) newModelPageforPDFPage(page *PDFPage) model.Page {
+	mediaBox := pdf.mediaBox
+	if page != nil && page.mediaBox != nil {
+		mediaBox = page.mediaBox
+	}
+
+	cropBox := pdf.cropBox
+	if page != nil && page.cropBox != nil {
+		cropBox = page.cropBox
+	}
+
+	return model.NewPage(mediaBox, cropBox)
+}
+
 // RenderPages renders page content into model.Pages
 func (pdf *PDF) RenderPages() ([]*model.Page, model.FontMap, error) {
 
@@ -1030,19 +1061,8 @@ func (pdf *PDF) RenderPages() ([]*model.Page, model.FontMap, error) {
 	for i, page := range pdf.pages {
 
 		pageNr := i + 1
-		mediaBox := pdf.mediaBox
-		cropBox := pdf.cropBox
 
-		// check taborders
-
-		p := model.Page{
-			MediaBox:  mediaBox,
-			CropBox:   cropBox,
-			Fm:        model.FontMap{},
-			Im:        model.ImageMap{},
-			AnnotTabs: map[int]model.FieldAnnotation{},
-			Buf:       new(bytes.Buffer),
-		}
+		p := pdf.newModelPageforPDFPage(page)
 
 		if page == nil {
 			if pageNr <= pdf.XRefTable.PageCount {
@@ -1070,20 +1090,11 @@ func (pdf *PDF) RenderPages() ([]*model.Page, model.FontMap, error) {
 			}
 
 			pp = append(pp, &p)
+
 			continue
 		}
 
-		if page.cropBox != nil {
-			cropBox = page.cropBox
-		}
-
-		// Render page background.
-		if page.bgCol == nil {
-			page.bgCol = pdf.bgCol
-		}
-		if page.bgCol != nil {
-			draw.FillRectNoBorder(p.Buf, cropBox, *page.bgCol)
-		}
+		pdf.renderPageBackground(page, p.Buf)
 
 		var headerHeight, headerDy float64
 		var footerHeight, footerDy float64
@@ -1107,7 +1118,7 @@ func (pdf *PDF) RenderPages() ([]*model.Page, model.FontMap, error) {
 		}
 
 		// Render page content.
-		r := cropBox.CroppedCopy(0)
+		r := page.cropBox.CroppedCopy(0)
 		r.LL.Y += footerHeight + footerDy
 		r.UR.Y -= headerHeight + headerDy
 		page.Content.mediaBox = r

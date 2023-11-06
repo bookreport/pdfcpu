@@ -25,7 +25,7 @@ import (
 	"testing"
 
 	"github.com/pdfcpu/pdfcpu/pkg/api"
-	pdf "github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
@@ -35,7 +35,7 @@ func testImportImages(t *testing.T, msg string, imgFiles []string, outFile, impC
 
 	// The default import conf uses the special pos:full argument
 	// which overrides all other import conf parms.
-	imp := pdf.DefaultImportConfig()
+	imp := pdfcpu.DefaultImportConfig()
 	if impConf != "" {
 		if imp, err = api.Import(impConf, types.POINTS); err != nil {
 			t.Fatalf("%s %s: %v\n", msg, outFile, err)
@@ -50,7 +50,8 @@ func testImportImages(t *testing.T, msg string, imgFiles []string, outFile, impC
 }
 
 func TestImportImages(t *testing.T) {
-	outDir := filepath.Join("..", "..", "samples", "import")
+
+	outDir := filepath.Join(samplesDir, "import")
 
 	testFile1 := filepath.Join(outDir, "CenteredGraySepia.pdf")
 	os.Remove(testFile1)
@@ -90,7 +91,7 @@ func TestImportImages(t *testing.T) {
 
 		// Page dimensions match image dimensions.
 		{"TestFull",
-			imageFileNames(t, filepath.Join("..", "..", "..", "resources")),
+			imageFileNames(t, resDir),
 			testFile2,
 			"pos:full"},
 	} {

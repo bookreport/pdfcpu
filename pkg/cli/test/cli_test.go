@@ -27,6 +27,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/cli"
 	"github.com/pdfcpu/pdfcpu/pkg/log"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 )
 
 var inDir, outDir, resDir, fontDir, samplesDir string
@@ -106,7 +107,7 @@ func copyFile(t *testing.T, srcFileName, destFileName string) error {
 
 func imageFileNames(t *testing.T, dir string) []string {
 	t.Helper()
-	fn, err := model.ImageFileNames(dir)
+	fn, err := model.ImageFileNames(dir, types.MB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +153,7 @@ func TestInfoCommand(t *testing.T) {
 	msg := "TestInfoCommand"
 	inFile := filepath.Join(inDir, "5116.DCT_Filter.pdf")
 
-	cmd := cli.InfoCommand(inFile, nil, conf)
+	cmd := cli.InfoCommand([]string{inFile}, nil, true, conf)
 	if _, err := cli.Process(cmd); err != nil {
 		t.Fatalf("%s: %v\n", msg, err)
 	}

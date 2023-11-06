@@ -36,8 +36,7 @@ type Command struct {
 	PageSelection  []string
 	PWOld          *string
 	PWNew          *string
-	Span           int
-	Rotation       int
+	IntVal         int
 	BoolVal        bool
 	IntVals        []int
 	StringVals     []string
@@ -48,6 +47,7 @@ type Command struct {
 	Box            *model.Box
 	Import         *pdfcpu.Import
 	NUp            *model.NUp
+	Cut            *model.Cut
 	PageBoundaries *model.PageBoundaries
 	Resize         *model.Resize
 	Watermark      *model.Watermark
@@ -86,7 +86,7 @@ var cmdMap = map[model.CommandMode]func(cmd *Command) ([]string, error){
 	model.ROTATE:                  Rotate,
 	model.NUP:                     NUp,
 	model.BOOKLET:                 Booklet,
-	model.INFO:                    Info,
+	model.LISTINFO:                ListInfo,
 	model.CHEATSHEETSFONTS:        CreateCheatSheetsFonts,
 	model.INSTALLFONTS:            InstallFonts,
 	model.LISTFONTS:               ListFonts,
@@ -115,6 +115,13 @@ var cmdMap = map[model.CommandMode]func(cmd *Command) ([]string, error){
 	model.FILLFORMFIELDS:          processForm,
 	model.MULTIFILLFORMFIELDS:     processForm,
 	model.RESIZE:                  Resize,
+	model.POSTER:                  Poster,
+	model.NDOWN:                   NDown,
+	model.CUT:                     Cut,
+	model.LISTBOOKMARKS:           processBookmarks,
+	model.EXPORTBOOKMARKS:         processBookmarks,
+	model.IMPORTBOOKMARKS:         processBookmarks,
+	model.REMOVEBOOKMARKS:         processBookmarks,
 }
 
 // ValidateCommand creates a new command to validate a file.
@@ -152,7 +159,7 @@ func SplitCommand(inFile, dirNameOut string, span int, conf *model.Configuration
 		Mode:   model.SPLIT,
 		InFile: &inFile,
 		OutDir: &dirNameOut,
-		Span:   span,
+		IntVal: span,
 		Conf:   conf}
 }
 
@@ -504,7 +511,7 @@ func RotateCommand(inFile, outFile string, rotation int, pageSelection []string,
 		InFile:        &inFile,
 		OutFile:       &outFile,
 		PageSelection: pageSelection,
-		Rotation:      rotation,
+		IntVal:        rotation,
 		Conf:          conf}
 }
 
@@ -539,15 +546,16 @@ func BookletCommand(inFiles []string, outFile string, pageSelection []string, nu
 }
 
 // InfoCommand creates a new command to output information about inFile.
-func InfoCommand(inFile string, pageSelection []string, conf *model.Configuration) *Command {
+func InfoCommand(inFiles []string, pageSelection []string, json bool, conf *model.Configuration) *Command {
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
-	conf.Cmd = model.INFO
+	conf.Cmd = model.LISTINFO
 	return &Command{
-		Mode:          model.INFO,
-		InFile:        &inFile,
+		Mode:          model.LISTINFO,
+		InFiles:       inFiles,
 		PageSelection: pageSelection,
+		BoolVal:       json,
 		Conf:          conf}
 }
 
@@ -795,15 +803,15 @@ func DumpCommand(inFilePDF string, vals []int, conf *model.Configuration) *Comma
 }
 
 // CreateCommand creates a new command to create a PDF file.
-func CreateCommand(inFileJSON, inFilePDF, outFilePDF string, conf *model.Configuration) *Command {
+func CreateCommand(inFilePDF, inFileJSON, outFilePDF string, conf *model.Configuration) *Command {
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
 	conf.Cmd = model.CREATE
 	return &Command{
 		Mode:       model.CREATE,
-		InFileJSON: &inFileJSON,
 		InFile:     &inFilePDF,
+		InFileJSON: &inFileJSON,
 		OutFile:    &outFilePDF,
 		Conf:       conf}
 }
@@ -932,4 +940,106 @@ func ResizeCommand(inFile, outFile string, pageSelection []string, resize *model
 		PageSelection: pageSelection,
 		Resize:        resize,
 		Conf:          conf}
+}
+
+// PosterCommand creates a new command to cut and slice pages horizontally or vertically.
+func PosterCommand(inFile, outDir, outFile string, pageSelection []string, cut *model.Cut, conf *model.Configuration) *Command {
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+	}
+	conf.Cmd = model.POSTER
+	return &Command{
+		Mode:          model.POSTER,
+		InFile:        &inFile,
+		OutDir:        &outDir,
+		OutFile:       &outFile,
+		PageSelection: pageSelection,
+		Cut:           cut,
+		Conf:          conf}
+}
+
+// NDownCommand creates a new command to cut and slice pages horizontally or vertically.
+func NDownCommand(inFile, outDir, outFile string, pageSelection []string, n int, cut *model.Cut, conf *model.Configuration) *Command {
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+	}
+	conf.Cmd = model.NDOWN
+	return &Command{
+		Mode:          model.NDOWN,
+		InFile:        &inFile,
+		OutDir:        &outDir,
+		OutFile:       &outFile,
+		PageSelection: pageSelection,
+		IntVal:        n,
+		Cut:           cut,
+		Conf:          conf}
+}
+
+// CutCommand creates a new command to cut and slice pages horizontally or vertically.
+func CutCommand(inFile, outDir, outFile string, pageSelection []string, cut *model.Cut, conf *model.Configuration) *Command {
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+	}
+	conf.Cmd = model.CUT
+	return &Command{
+		Mode:          model.CUT,
+		InFile:        &inFile,
+		OutDir:        &outDir,
+		OutFile:       &outFile,
+		PageSelection: pageSelection,
+		Cut:           cut,
+		Conf:          conf}
+}
+
+// ListBookmarksCommand creates a new command to list bookmarks of inFile.
+func ListBookmarksCommand(inFile string, conf *model.Configuration) *Command {
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+	}
+	conf.Cmd = model.LISTBOOKMARKS
+	return &Command{
+		Mode:   model.LISTBOOKMARKS,
+		InFile: &inFile,
+		Conf:   conf}
+}
+
+// ExportBookmarksCommand creates a new command to export bookmarks of inFile.
+func ExportBookmarksCommand(inFile, outFileJSON string, conf *model.Configuration) *Command {
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+	}
+	conf.Cmd = model.EXPORTBOOKMARKS
+	return &Command{
+		Mode:        model.EXPORTBOOKMARKS,
+		InFile:      &inFile,
+		OutFileJSON: &outFileJSON,
+		Conf:        conf}
+}
+
+// ImportBookmarksCommand creates a new command to import bookmarks to inFile.
+func ImportBookmarksCommand(inFile, inFileJSON, outFile string, replace bool, conf *model.Configuration) *Command {
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+	}
+	conf.Cmd = model.IMPORTBOOKMARKS
+	return &Command{
+		Mode:       model.IMPORTBOOKMARKS,
+		BoolVal:    replace,
+		InFile:     &inFile,
+		InFileJSON: &inFileJSON,
+		OutFile:    &outFile,
+		Conf:       conf}
+}
+
+// RemoveBookmarksCommand creates a new command to remove all bookmarks from inFile.
+func RemoveBookmarksCommand(inFile, outFile string, conf *model.Configuration) *Command {
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+	}
+	conf.Cmd = model.REMOVEBOOKMARKS
+	return &Command{
+		Mode:    model.REMOVEBOOKMARKS,
+		InFile:  &inFile,
+		OutFile: &outFile,
+		Conf:    conf}
 }

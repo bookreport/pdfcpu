@@ -19,15 +19,12 @@ package primitives
 import (
 	"bytes"
 	"fmt"
-	"strconv"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/pdfcpu/pdfcpu/pkg/font"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
 	pdffont "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/font"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 	"github.com/pkg/errors"
 )
@@ -235,42 +232,22 @@ func (cb *ComboBox) validate() error {
 	return cb.validateTab()
 }
 
-func (cb *ComboBox) calcFontFromDA(ctx *model.Context, da []string, fonts map[string]types.IndirectRef) (*types.IndirectRef, error) {
+func (cb *ComboBox) calcFontFromDA(ctx *model.Context, d types.Dict, fonts map[string]types.IndirectRef) (*types.IndirectRef, error) {
 
-	var (
-		f      FormFont
-		fontID string
-	)
-
-	f.SetCol(color.Black)
-	for i := 0; i < len(da); i++ {
-		if da[i] == "Tf" {
-			fontID = da[i-2][1:]
-			cb.SetFontID(fontID)
-			fl, err := strconv.ParseFloat(da[i-1], 64)
-			if err != nil {
-				return nil, err
-			}
-			f.Size = int(fl)
-			continue
-		}
-		if da[i] == "rg" {
-			r, _ := strconv.ParseFloat(da[i-3], 32)
-			g, _ := strconv.ParseFloat(da[i-2], 32)
-			b, _ := strconv.ParseFloat(da[i-1], 32)
-			f.SetCol(color.SimpleColor{R: float32(r), G: float32(g), B: float32(b)})
-		}
-		if da[i] == "g" {
-			g, _ := strconv.ParseFloat(da[i-1], 32)
-			f.SetCol(color.SimpleColor{R: float32(g), G: float32(g), B: float32(g)})
+	s := d.StringEntry("DA")
+	if s == nil {
+		s = ctx.Form.StringEntry("DA")
+		if s == nil {
+			return nil, errors.New("pdfcpu: combobox missing \"DA\"")
 		}
 	}
 
-	if len(cb.fontID) == 0 {
-		return nil, errors.New("pdfcpu: unable to detect font id")
+	fontID, f, err := fontFromDA(*s)
+	if err != nil {
+		return nil, err
 	}
 
-	cb.Font = &f
+	cb.Font, cb.fontID = &f, fontID
 
 	id, name, lang, fontIndRef, err := extractFormFontDetails(ctx, cb.fontID, fonts)
 	if err != nil {
@@ -445,23 +422,7 @@ func (cb *ComboBox) calcBorder() (boWidth float64, boCol *color.SimpleColor) {
 	return cb.Border.calc()
 }
 
-func (cb *ComboBox) prepareDict(fonts model.FontMap) (types.Dict, error) {
-	pdf := cb.pdf
-
-	id, err := types.EscapeUTF16String(cb.ID)
-	if err != nil {
-		return nil, err
-	}
-
-	opt := types.Array{}
-	for _, s := range cb.Options {
-		s, err := types.EscapeUTF16String(s)
-		if err != nil {
-			return nil, err
-		}
-		opt = append(opt, types.StringLiteral(*s))
-	}
-
+func (cb *ComboBox) prepareFF() FieldFlags {
 	ff := FieldFlags(0)
 	ff += FieldCombo
 	if cb.Edit {
@@ -472,29 +433,10 @@ func (cb *ComboBox) prepareDict(fonts model.FontMap) (types.Dict, error) {
 		// Note: unsupported in Mac Preview
 		ff += FieldReadOnly
 	}
+	return ff
+}
 
-	d := types.Dict(
-		map[string]types.Object{
-			"Type":    types.Name("Annot"),
-			"Subtype": types.Name("Widget"),
-			"FT":      types.Name("Ch"),
-			"Rect":    cb.BoundingBox.Array(),
-			"F":       types.Integer(model.AnnPrint),
-			"Ff":      types.Integer(ff),
-			"Opt":     opt,
-			"Q":       types.Integer(cb.HorAlign),
-			"T":       types.StringLiteral(*id),
-		},
-	)
-
-	if cb.Tip != "" {
-		tu, err := types.EscapeUTF16String(cb.Tip)
-		if err != nil {
-			return nil, err
-		}
-		d["TU"] = types.StringLiteral(*tu)
-	}
-
+func (cb *ComboBox) handleBorderAndMK(d types.Dict) {
 	bgCol := cb.BgCol
 	if bgCol == nil {
 		bgCol = cb.content.page.bgCol
@@ -520,6 +462,50 @@ func (cb *ComboBox) prepareDict(fonts model.FontMap) (types.Dict, error) {
 	if boWidth > 0 {
 		d["Border"] = types.NewNumberArray(0, 0, boWidth)
 	}
+}
+
+func (cb *ComboBox) prepareDict(fonts model.FontMap) (types.Dict, error) {
+	pdf := cb.pdf
+
+	id, err := types.EscapeUTF16String(cb.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	opt := types.Array{}
+	for _, s := range cb.Options {
+		s, err := types.EscapeUTF16String(s)
+		if err != nil {
+			return nil, err
+		}
+		opt = append(opt, types.StringLiteral(*s))
+	}
+
+	ff := cb.prepareFF()
+
+	d := types.Dict(
+		map[string]types.Object{
+			"Type":    types.Name("Annot"),
+			"Subtype": types.Name("Widget"),
+			"FT":      types.Name("Ch"),
+			"Rect":    cb.BoundingBox.Array(),
+			"F":       types.Integer(model.AnnPrint),
+			"Ff":      types.Integer(ff),
+			"Opt":     opt,
+			"Q":       types.Integer(cb.HorAlign),
+			"T":       types.StringLiteral(*id),
+		},
+	)
+
+	if cb.Tip != "" {
+		tu, err := types.EscapeUTF16String(cb.Tip)
+		if err != nil {
+			return nil, err
+		}
+		d["TU"] = types.StringLiteral(*tu)
+	}
+
+	cb.handleBorderAndMK(d)
 
 	v := cb.Value
 	if cb.Default != "" {
@@ -743,12 +729,7 @@ func NewComboBox(
 
 	cb.BoundingBox = types.RectForDim(bb.Width(), bb.Height())
 
-	s := d.StringEntry("DA")
-	if s == nil {
-		return nil, nil, errors.New("pdfcpu: combobox missing \"DA\"")
-	}
-
-	fontIndRef, err := cb.calcFontFromDA(ctx, strings.Split(*s, " "), fonts)
+	fontIndRef, err := cb.calcFontFromDA(ctx, d, fonts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -768,7 +749,7 @@ func NewComboBox(
 	boWidth := calcBorderWidth(d)
 	if boWidth > 0 {
 		b.Width = boWidth
-		b.SetCol(*boCol)
+		b.col = boCol
 	}
 	cb.Border = &b
 

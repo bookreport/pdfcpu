@@ -37,7 +37,6 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/matrix"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
-
 	"github.com/pkg/errors"
 )
 
@@ -141,6 +140,9 @@ func parsePositionAnchorWM(s string, wm *model.Watermark) error {
 	if err != nil {
 		return err
 	}
+	if a == types.Full {
+		a = types.Center
+	}
 	wm.Pos = a
 	return nil
 }
@@ -155,13 +157,13 @@ func parsePositionOffsetWM(s string, wm *model.Watermark) error {
 	if err != nil {
 		return err
 	}
-	wm.Dx = int(types.ToUserSpace(f, wm.InpUnit))
+	wm.Dx = types.ToUserSpace(f, wm.InpUnit)
 
 	f, err = strconv.ParseFloat(d[1], 64)
 	if err != nil {
 		return err
 	}
-	wm.Dy = int(types.ToUserSpace(f, wm.InpUnit))
+	wm.Dy = types.ToUserSpace(f, wm.InpUnit)
 
 	return nil
 }
@@ -360,55 +362,51 @@ func parseMargins(s string, wm *model.Watermark) error {
 		return errors.Errorf("pdfcpu: margins: need 1,2,3 or 4 int values, %s\n", s)
 	}
 
-	f, err := strconv.ParseFloat(m[0], 64)
+	f1, err := strconv.ParseFloat(m[0], 64)
 	if err != nil {
 		return err
 	}
-	i := int(types.ToUserSpace(f, wm.InpUnit))
 
 	if len(m) == 1 {
-		wm.MLeft = i
-		wm.MRight = i
-		wm.MTop = i
-		wm.MBot = i
+		wm.MLeft = f1
+		wm.MRight = f1
+		wm.MTop = f1
+		wm.MBot = f1
 		return nil
 	}
 
-	f, err = strconv.ParseFloat(m[1], 64)
+	f2, err := strconv.ParseFloat(m[1], 64)
 	if err != nil {
 		return err
 	}
-	j := int(types.ToUserSpace(f, wm.InpUnit))
 
 	if len(m) == 2 {
-		wm.MTop, wm.MBot = i, i
-		wm.MLeft, wm.MRight = j, j
+		wm.MTop, wm.MBot = f1, f1
+		wm.MLeft, wm.MRight = f2, f2
 		return nil
 	}
 
-	f, err = strconv.ParseFloat(m[2], 64)
+	f3, err := strconv.ParseFloat(m[2], 64)
 	if err != nil {
 		return err
 	}
-	k := int(types.ToUserSpace(f, wm.InpUnit))
 
 	if len(m) == 3 {
-		wm.MTop = i
-		wm.MLeft, wm.MRight = j, j
-		wm.MBot = k
+		wm.MTop = f1
+		wm.MLeft, wm.MRight = f2, f2
+		wm.MBot = f3
 		return nil
 	}
 
-	f, err = strconv.ParseFloat(m[3], 64)
+	f4, err := strconv.ParseFloat(m[3], 64)
 	if err != nil {
 		return err
 	}
-	l := int(types.ToUserSpace(f, wm.InpUnit))
 
-	wm.MTop = i
-	wm.MRight = j
-	wm.MBot = k
-	wm.MLeft = l
+	wm.MTop = f1
+	wm.MRight = f2
+	wm.MBot = f3
+	wm.MLeft = f4
 	return nil
 }
 
@@ -427,7 +425,7 @@ func parseBorder(s string, wm *model.Watermark) error {
 		return errors.Errorf("pdfcpu: borders: need 1,2,3,4 or 5 int values, %s\n", s)
 	}
 
-	wm.BorderWidth, err = strconv.Atoi(b[0])
+	wm.BorderWidth, err = strconv.ParseFloat(b[0], 64)
 	if err != nil {
 		return err
 	}
@@ -869,7 +867,7 @@ func pdfFormContent(w io.Writer, pageNr int, wm model.Watermark) error {
 
 	m := m1.Multiply(m2)
 
-	fmt.Fprintf(w, "%.2f %.2f %.2f %.2f %.2f %.2f cm ", m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1])
+	fmt.Fprintf(w, "%.5f %.5f %.5f %.5f %.5f %.5f cm ", m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1])
 
 	_, err := w.Write(cs)
 	return err
@@ -909,13 +907,13 @@ func setupTextDescriptor(wm model.Watermark, timestampFormat string, pageNr, pag
 	td.RTL = wm.RTL
 
 	// Set margins.
-	td.MLeft = float64(wm.MLeft)
-	td.MRight = float64(wm.MRight)
-	td.MTop = float64(wm.MTop)
-	td.MBot = float64(wm.MBot)
+	td.MLeft = wm.MLeft
+	td.MRight = wm.MRight
+	td.MTop = wm.MTop
+	td.MBot = wm.MBot
 
 	// Set border.
-	td.BorderWidth = float64(wm.BorderWidth)
+	td.BorderWidth = wm.BorderWidth
 	td.BorderStyle = wm.BorderStyle
 	if wm.BorderColor != nil {
 		td.ShowBorder = true
@@ -1094,7 +1092,7 @@ func wmContent(wm model.Watermark, gsID, xoID string) []byte {
 	p3 := m.Transform(types.Point{X: wm.Bb.UR.X, Y: wm.Bb.UR.Y})
 	p4 := m.Transform(types.Point{X: wm.Bb.LL.X, Y: wm.Bb.UR.Y})
 	wm.BbTrans = types.QuadLiteral{P1: p1, P2: p2, P3: p3, P4: p4}
-	insertOCG := " /Artifact <</Subtype /Watermark /Type /Pagination >>BDC q %.2f %.2f %.2f %.2f %.2f %.2f cm /%s gs /%s Do Q EMC "
+	insertOCG := " /Artifact <</Subtype /Watermark /Type /Pagination >>BDC q %.5f %.5f %.5f %.5f %.5f %.5f cm /%s gs /%s Do Q EMC "
 	var b bytes.Buffer
 	fmt.Fprintf(&b, insertOCG, m[0][0], m[0][1], m[1][0], m[1][1], m[2][0], m[2][1], gsID, xoID)
 	return b.Bytes()
@@ -1119,7 +1117,9 @@ func insertPageContentsForWM(ctx *model.Context, pageDict types.Dict, wm model.W
 func patchFirstContentStreamForWatermark(sd *types.StreamDict, gsID, xoID string, wm model.Watermark, isLast bool) error {
 	err := sd.Decode()
 	if err == filter.ErrUnsupportedFilter {
-		log.Info.Println("unsupported filter: unable to patch content with watermark.")
+		if log.InfoEnabled() {
+			log.Info.Println("unsupported filter: unable to patch content with watermark.")
+		}
 		return nil
 	}
 	if err != nil {
@@ -1160,7 +1160,9 @@ func patchFirstContentStreamForWatermark(sd *types.StreamDict, gsID, xoID string
 func patchLastContentStreamForWatermark(sd *types.StreamDict, gsID, xoID string, wm model.Watermark) error {
 	err := sd.Decode()
 	if err == filter.ErrUnsupportedFilter {
-		log.Info.Println("unsupported filter: unable to patch content with watermark.")
+		if log.InfoEnabled() {
+			log.Info.Println("unsupported filter: unable to patch content with watermark.")
+		}
 		return nil
 	}
 	if err != nil {
@@ -1271,21 +1273,46 @@ func viewPort(a *model.InheritedPageAttrs) *types.Rectangle {
 	return visibleRegion
 }
 
-func addPageWatermark(ctx *model.Context, i int, wm model.Watermark) error {
-	if i > ctx.PageCount {
-		return errors.Errorf("pdfcpu: invalid page number: %d", i)
+func handleLink(ctx *model.Context, pageIndRef *types.IndirectRef, d types.Dict, pageNr int, wm model.Watermark) error {
+	if !wm.OnTop || wm.URL == "" {
+		return nil
 	}
 
-	log.Debug.Printf("addPageWatermark page:%d\n", i)
+	ann := model.NewLinkAnnotation(
+		*wm.BbTrans.EnclosingRectangle(5.0),
+		types.QuadPoints{wm.BbTrans},
+		nil,
+		wm.URL,
+		"pdfcpu",
+		model.AnnNoZoom+model.AnnNoRotate,
+		nil,
+		false)
+
+	_, err := AddAnnotation(ctx, pageIndRef, d, pageNr, ann, false)
+
+	return err
+}
+
+func addPageWatermark(ctx *model.Context, pageNr int, wm model.Watermark) error {
+	if pageNr > ctx.PageCount {
+		return errors.Errorf("pdfcpu: invalid page number: %d", pageNr)
+	}
+
+	if log.DebugEnabled() {
+		log.Debug.Printf("addPageWatermark page:%d\n", pageNr)
+	}
+
 	if wm.Update {
-		log.Debug.Println("Updating")
-		if _, err := removePageWatermark(ctx, i); err != nil {
+		if log.DebugEnabled() {
+			log.Debug.Println("Updating")
+		}
+		if _, err := removePageWatermark(ctx, pageNr); err != nil {
 			return err
 		}
 	}
 
 	consolidateRes := false
-	d, pageIndRef, inhPAttrs, err := ctx.PageDict(i, consolidateRes)
+	d, pageIndRef, inhPAttrs, err := ctx.PageDict(pageNr, consolidateRes)
 	if err != nil {
 		return err
 	}
@@ -1297,23 +1324,23 @@ func addPageWatermark(ctx *model.Context, i int, wm model.Watermark) error {
 
 	// Reset page rotation in page dict.
 	if wm.PageRot != 0 {
-
 		if types.IntMemberOf(wm.PageRot, []int{+90, -90, +270, -270}) {
 			w := wm.Vp.Width()
 			wm.Vp.UR.X = wm.Vp.LL.X + wm.Vp.Height()
 			wm.Vp.UR.Y = wm.Vp.LL.Y + w
 		}
-
 		d.Update("MediaBox", wm.Vp.Array())
 		d.Update("CropBox", wm.Vp.Array())
 		d.Delete("Rotate")
 	}
 
-	if err = createForm(ctx, i, ctx.PageCount, &wm, stampWithBBox); err != nil {
+	if err = createForm(ctx, pageNr, ctx.PageCount, &wm, stampWithBBox); err != nil {
 		return err
 	}
 
-	log.Debug.Printf("\n%s\n", wm)
+	if log.DebugEnabled() {
+		log.Debug.Printf("\n%s\n", wm)
+	}
 
 	gsID := "GS0"
 	xoID := "Fm0"
@@ -1338,24 +1365,7 @@ func addPageWatermark(ctx *model.Context, i int, wm model.Watermark) error {
 		return err
 	}
 
-	if wm.OnTop && wm.URL != "" {
-
-		ann := model.NewLinkAnnotation(
-			*wm.BbTrans.EnclosingRectangle(5.0),
-			types.QuadPoints{wm.BbTrans},
-			nil,
-			wm.URL,
-			"pdfcpu",
-			model.AnnNoZoom+model.AnnNoRotate,
-			nil,
-			false)
-
-		if _, err := AddAnnotation(ctx, pageIndRef, d, i, ann, false); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return handleLink(ctx, pageIndRef, d, pageNr, wm)
 }
 
 func createWMResources(
@@ -1545,7 +1555,9 @@ func AddWatermarksSliceMap(ctx *model.Context, m map[int][]*model.Watermark) err
 
 // AddWatermarks adds watermarks to all pages selected.
 func AddWatermarks(ctx *model.Context, selectedPages types.IntSet, wm *model.Watermark) error {
-	log.Debug.Printf("AddWatermarks wm:\n%s\n", wm)
+	if log.DebugEnabled() {
+		log.Debug.Printf("AddWatermarks wm:\n%s\n", wm)
+	}
 	var err error
 	if wm.Ocg, err = prepareOCPropertiesInRoot(ctx, wm.OnTop); err != nil {
 		return err
@@ -1618,7 +1630,9 @@ func removeForms(ctx *model.Context, d types.Dict, ids []string, i int) error {
 func removeArtifacts(sd *types.StreamDict, i int) (ok bool, extGStates []string, forms []string, err error) {
 	err = sd.Decode()
 	if err == filter.ErrUnsupportedFilter {
-		log.Info.Printf("unsupported filter: unable to patch content with watermark for page %d\n", i)
+		if log.InfoEnabled() {
+			log.Info.Printf("unsupported filter: unable to patch content with watermark for page %d\n", i)
+		}
 		return false, nil, nil, nil
 	}
 	if err != nil {
@@ -1848,18 +1862,9 @@ func locateOCGs(ctx *model.Context) (types.Array, error) {
 	return ctx.DereferenceArray(o)
 }
 
-// RemoveWatermarks removes watermarks for all pages selected.
-func RemoveWatermarks(ctx *model.Context, selectedPages types.IntSet) error {
-	log.Debug.Printf("RemoveWatermarks\n")
+func detectStampOCG(ctx *model.Context, arr types.Array) error {
+	for _, o := range arr {
 
-	a, err := locateOCGs(ctx)
-	if err != nil {
-		return err
-	}
-
-	found := false
-
-	for _, o := range a {
 		d, err := ctx.DereferenceDict(o)
 		if err != nil {
 			return err
@@ -1882,17 +1887,17 @@ func RemoveWatermarks(ctx *model.Context, selectedPages types.IntSet) error {
 			continue
 		}
 
-		found = true
-		break
+		return nil
 	}
 
-	if !found {
-		return errNoWatermark
-	}
+	return errNoWatermark
+}
 
-	var removedSmth bool
+func removePageWatermarks(ctx *model.Context, selectedPages types.IntSet) error {
+	var removed bool
 
 	for k, v := range selectedPages {
+
 		if !v {
 			continue
 		}
@@ -1903,15 +1908,33 @@ func RemoveWatermarks(ctx *model.Context, selectedPages types.IntSet) error {
 		}
 
 		if ok {
-			removedSmth = true
+			removed = true
 		}
 	}
 
-	if !removedSmth {
+	if !removed {
 		return errNoWatermark
 	}
 
 	return nil
+}
+
+// RemoveWatermarks removes watermarks for all pages selected.
+func RemoveWatermarks(ctx *model.Context, selectedPages types.IntSet) error {
+	if log.DebugEnabled() {
+		log.Debug.Printf("RemoveWatermarks\n")
+	}
+
+	arr, err := locateOCGs(ctx)
+	if err != nil {
+		return err
+	}
+
+	if err := detectStampOCG(ctx, arr); err != nil {
+		return err
+	}
+
+	return removePageWatermarks(ctx, selectedPages)
 }
 
 func detectArtifacts(sd *types.StreamDict) (bool, error) {

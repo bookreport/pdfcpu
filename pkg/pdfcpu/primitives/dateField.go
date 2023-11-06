@@ -19,14 +19,12 @@ package primitives
 import (
 	"bytes"
 	"fmt"
-	"strconv"
-	"strings"
+	"io"
 
 	"github.com/pdfcpu/pdfcpu/pkg/font"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/color"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/format"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 	"github.com/pkg/errors"
 )
@@ -283,42 +281,22 @@ func (df *DateField) validate() error {
 	return df.validateTab()
 }
 
-func (df *DateField) calcFontFromDA(ctx *model.Context, da []string, fonts map[string]types.IndirectRef) (*types.IndirectRef, error) {
+func (df *DateField) calcFontFromDA(ctx *model.Context, d types.Dict, fonts map[string]types.IndirectRef) (*types.IndirectRef, error) {
 
-	var (
-		f      FormFont
-		fontID string
-	)
-
-	f.SetCol(color.Black)
-	for i := 0; i < len(da); i++ {
-		if da[i] == "Tf" {
-			fontID = da[i-2][1:]
-			df.SetFontID(fontID)
-			fl, err := strconv.ParseFloat(da[i-1], 64)
-			if err != nil {
-				return nil, err
-			}
-			f.Size = int(fl)
-			continue
-		}
-		if da[i] == "rg" {
-			r, _ := strconv.ParseFloat(da[i-3], 32)
-			g, _ := strconv.ParseFloat(da[i-2], 32)
-			b, _ := strconv.ParseFloat(da[i-1], 32)
-			f.SetCol(color.SimpleColor{R: float32(r), G: float32(g), B: float32(b)})
-		}
-		if da[i] == "g" {
-			g, _ := strconv.ParseFloat(da[i-1], 32)
-			f.SetCol(color.SimpleColor{R: float32(g), G: float32(g), B: float32(g)})
+	s := d.StringEntry("DA")
+	if s == nil {
+		s = ctx.Form.StringEntry("DA")
+		if s == nil {
+			return nil, errors.New("pdfcpu: datefield missing \"DA\"")
 		}
 	}
 
-	if len(df.fontID) == 0 {
-		return nil, errors.New("pdfcpu: unable to detect font id")
+	fontID, f, err := fontFromDA(*s)
+	if err != nil {
+		return nil, err
 	}
 
-	df.Font = &f
+	df.Font, df.fontID = &f, fontID
 
 	id, name, lang, fontIndRef, err := extractFormFontDetails(ctx, df.fontID, fonts)
 	if err != nil {
@@ -433,23 +411,28 @@ func (df *DateField) labelPos(labelHeight, w, g float64) (float64, float64) {
 	return x, y
 }
 
+func (tf *DateField) renderBackground(w io.Writer, bgCol, boCol *color.SimpleColor, boWidth, width, height float64) {
+	if bgCol != nil || (boCol != nil && boWidth > 0) {
+		fmt.Fprint(w, "q ")
+		if bgCol != nil {
+			fmt.Fprintf(w, "%.2f %.2f %.2f rg 0 0 %.2f %.2f re f ", bgCol.R, bgCol.G, bgCol.B, width, height)
+		}
+		if boCol != nil && boWidth > 0 {
+			fmt.Fprintf(w, "%.2f %.2f %.2f RG %.2f w %.2f %.2f %.2f %.2f re s ",
+				boCol.R, boCol.G, boCol.B, boWidth, boWidth/2, boWidth/2, width-boWidth, height-boWidth)
+		}
+		fmt.Fprint(w, "Q ")
+	}
+}
+
 func (df *DateField) renderN(xRefTable *model.XRefTable) ([]byte, error) {
+
 	w, h := df.BoundingBox.Width(), df.BoundingBox.Height()
 	bgCol := df.BgCol
 	boWidth, boCol := df.calcBorder()
 	buf := new(bytes.Buffer)
 
-	if bgCol != nil || boCol != nil {
-		fmt.Fprint(buf, "q ")
-		if bgCol != nil {
-			fmt.Fprintf(buf, "%.2f %.2f %.2f rg 0 0 %.2f %.2f re f ", bgCol.R, bgCol.G, bgCol.B, w, h)
-		}
-		if boCol != nil {
-			fmt.Fprintf(buf, "%.2f %.2f %.2f RG %.2f w %.2f %.2f %.2f %.2f re s ",
-				boCol.R, boCol.G, boCol.B, boWidth, boWidth/2, boWidth/2, w-boWidth, h-boWidth)
-		}
-		fmt.Fprint(buf, "Q ")
-	}
+	df.renderBackground(buf, bgCol, boCol, boWidth, w, h)
 
 	fmt.Fprint(buf, "/Tx BMC q ")
 	fmt.Fprintf(buf, "1 1 %.1f %.1f re W n ", w-2, h-2)
@@ -575,6 +558,43 @@ func (df *DateField) calcBorder() (boWidth float64, boCol *color.SimpleColor) {
 	return df.Border.calc()
 }
 
+func (df *DateField) prepareFF() FieldFlags {
+	ff := FieldDoNotSpellCheck
+	ff += FieldDoNotScroll
+	if df.Locked {
+		ff += FieldReadOnly
+	}
+	return ff
+}
+
+func (df *DateField) handleBorderAndMK(d types.Dict) {
+	bgCol := df.BgCol
+	if bgCol == nil {
+		bgCol = df.content.page.bgCol
+		if bgCol == nil {
+			bgCol = df.pdf.bgCol
+		}
+	}
+	df.BgCol = bgCol
+
+	boWidth, boCol := df.calcBorder()
+
+	if bgCol != nil || boCol != nil {
+		appCharDict := types.Dict{}
+		if bgCol != nil {
+			appCharDict["BG"] = bgCol.Array()
+		}
+		if boCol != nil && df.Border.Width > 0 {
+			appCharDict["BC"] = boCol.Array()
+		}
+		d["MK"] = appCharDict
+	}
+
+	if boWidth > 0 {
+		d["Border"] = types.NewNumberArray(0, 0, boWidth)
+	}
+}
+
 func (df *DateField) prepareDict(fonts model.FontMap) (types.Dict, error) {
 	pdf := df.pdf
 
@@ -583,11 +603,7 @@ func (df *DateField) prepareDict(fonts model.FontMap) (types.Dict, error) {
 		return nil, err
 	}
 
-	ff := FieldDoNotSpellCheck
-	ff += FieldDoNotScroll
-	if df.Locked {
-		ff += FieldReadOnly
-	}
+	ff := df.prepareFF()
 
 	format, err := types.Escape(fmt.Sprintf("AFDate_FormatEx(\"%s\");", df.dateFormat.Ext))
 	if err != nil {
@@ -636,31 +652,7 @@ func (df *DateField) prepareDict(fonts model.FontMap) (types.Dict, error) {
 		},
 	)
 
-	bgCol := df.BgCol
-	if bgCol == nil {
-		bgCol = df.content.page.bgCol
-		if bgCol == nil {
-			bgCol = df.pdf.bgCol
-		}
-	}
-	df.BgCol = bgCol
-
-	boWidth, boCol := df.calcBorder()
-
-	if bgCol != nil || boCol != nil {
-		appCharDict := types.Dict{}
-		if bgCol != nil {
-			appCharDict["BG"] = bgCol.Array()
-		}
-		if boCol != nil && df.Border.Width > 0 {
-			appCharDict["BC"] = boCol.Array()
-		}
-		d["MK"] = appCharDict
-	}
-
-	if boWidth > 0 {
-		d["Border"] = types.NewNumberArray(0, 0, boWidth)
-	}
+	df.handleBorderAndMK(d)
 
 	if df.Value != "" {
 		s, err := types.EscapeUTF16String(df.Value)
@@ -875,12 +867,7 @@ func NewDateField(
 
 	df.BoundingBox = types.RectForDim(bb.Width(), bb.Height())
 
-	s := d.StringEntry("DA")
-	if s == nil {
-		return nil, nil, errors.New("pdfcpu: datefield missing \"DA\"")
-	}
-
-	fontIndRef, err := df.calcFontFromDA(ctx, strings.Split(*s, " "), fonts)
+	fontIndRef, err := df.calcFontFromDA(ctx, d, fonts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -900,7 +887,7 @@ func NewDateField(
 	boWidth := calcBorderWidth(d)
 	if boWidth > 0 {
 		b.Width = boWidth
-		b.SetCol(*boCol)
+		b.col = boCol
 	}
 	df.Border = &b
 

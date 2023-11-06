@@ -98,7 +98,9 @@ func NUp(rs io.ReadSeeker, w io.Writer, imgFiles, selectedPages []string, nup *m
 	}
 	conf.Cmd = model.NUP
 
-	log.Info.Printf("%s", nup)
+	if log.InfoEnabled() {
+		log.Info.Printf("%s", nup)
+	}
 
 	var (
 		ctx *model.Context
@@ -121,7 +123,7 @@ func NUp(rs io.ReadSeeker, w io.Writer, imgFiles, selectedPages []string, nup *m
 			return err
 		}
 
-		pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true)
+		pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true, true)
 		if err != nil {
 			return err
 		}
@@ -144,7 +146,9 @@ func NUp(rs io.ReadSeeker, w io.Writer, imgFiles, selectedPages []string, nup *m
 		return err
 	}
 
-	log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	if log.StatsEnabled() {
+		log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	}
 
 	return nil
 }
@@ -166,7 +170,7 @@ func NUpFile(inFiles []string, outFile string, selectedPages []string, nup *mode
 		}
 		return err
 	}
-	log.CLI.Printf("writing %s...\n", outFile)
+	logWritingTo(outFile)
 
 	defer func() {
 		if err != nil {

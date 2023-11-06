@@ -24,17 +24,22 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/log"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pkg/errors"
 )
 
 // Rotate rotates selected pages of rs clockwise by rotation degrees and writes the result to w.
 func Rotate(rs io.ReadSeeker, w io.Writer, rotation int, selectedPages []string, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: Rotate: missing rs")
+	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
 	conf.Cmd = model.ROTATE
 
 	fromStart := time.Now()
-	ctx, durRead, durVal, durOpt, err := readValidateAndOptimize(rs, conf, fromStart)
+	ctx, durRead, durVal, durOpt, err := ReadValidateAndOptimize(rs, conf, fromStart)
 	if err != nil {
 		return err
 	}
@@ -44,7 +49,7 @@ func Rotate(rs io.ReadSeeker, w io.Writer, rotation int, selectedPages []string,
 	}
 
 	from := time.Now()
-	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true)
+	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true, true)
 	if err != nil {
 		return err
 	}
@@ -85,9 +90,9 @@ func RotateFile(inFile, outFile string, rotation int, selectedPages []string, co
 	tmpFile := inFile + ".tmp"
 	if outFile != "" && inFile != outFile {
 		tmpFile = outFile
-		log.CLI.Printf("writing %s...\n", outFile)
+		logWritingTo(outFile)
 	} else {
-		log.CLI.Printf("writing %s...\n", inFile)
+		logWritingTo(inFile)
 	}
 	if f2, err = os.Create(tmpFile); err != nil {
 		f1.Close()

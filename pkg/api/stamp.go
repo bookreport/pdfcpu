@@ -35,6 +35,10 @@ func WatermarkContext(ctx *model.Context, selectedPages types.IntSet, wm *model.
 
 // AddWatermarksMap adds watermarks in m to corresponding pages in rs and writes the result to w.
 func AddWatermarksMap(rs io.ReadSeeker, w io.Writer, m map[int]*model.Watermark, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: AddWatermarksMap: missing rs")
+	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
@@ -45,7 +49,7 @@ func AddWatermarksMap(rs io.ReadSeeker, w io.Writer, m map[int]*model.Watermark,
 	}
 
 	fromStart := time.Now()
-	ctx, durRead, durVal, durOpt, err := readValidateAndOptimize(rs, conf, fromStart)
+	ctx, durRead, durVal, durOpt, err := ReadValidateAndOptimize(rs, conf, fromStart)
 	if err != nil {
 		return err
 	}
@@ -56,7 +60,9 @@ func AddWatermarksMap(rs io.ReadSeeker, w io.Writer, m map[int]*model.Watermark,
 		return err
 	}
 
-	log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	if log.StatsEnabled() {
+		log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	}
 
 	if conf.ValidationMode != model.ValidationNone {
 		if err = ValidateContext(ctx); err != nil {
@@ -89,9 +95,9 @@ func AddWatermarksMapFile(inFile, outFile string, m map[int]*model.Watermark, co
 	tmpFile := inFile + ".tmp"
 	if outFile != "" && inFile != outFile {
 		tmpFile = outFile
-		log.CLI.Printf("writing %s...\n", outFile)
+		logWritingTo(outFile)
 	} else {
-		log.CLI.Printf("writing %s...\n", inFile)
+		logWritingTo(inFile)
 	}
 	if f2, err = os.Create(tmpFile); err != nil {
 		f1.Close()
@@ -123,6 +129,10 @@ func AddWatermarksMapFile(inFile, outFile string, m map[int]*model.Watermark, co
 
 // AddWatermarksSliceMap adds watermarks in m to corresponding pages in rs and writes the result to w.
 func AddWatermarksSliceMap(rs io.ReadSeeker, w io.Writer, m map[int][]*model.Watermark, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: AddWatermarksSliceMap: missing rs")
+	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
@@ -133,7 +143,7 @@ func AddWatermarksSliceMap(rs io.ReadSeeker, w io.Writer, m map[int][]*model.Wat
 	}
 
 	fromStart := time.Now()
-	ctx, durRead, durVal, durOpt, err := readValidateAndOptimize(rs, conf, fromStart)
+	ctx, durRead, durVal, durOpt, err := ReadValidateAndOptimize(rs, conf, fromStart)
 	if err != nil {
 		return err
 	}
@@ -144,7 +154,9 @@ func AddWatermarksSliceMap(rs io.ReadSeeker, w io.Writer, m map[int][]*model.Wat
 		return err
 	}
 
-	log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	if log.StatsEnabled() {
+		log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	}
 
 	if conf.ValidationMode != model.ValidationNone {
 		if err = ValidateContext(ctx); err != nil {
@@ -177,9 +189,9 @@ func AddWatermarksSliceMapFile(inFile, outFile string, m map[int][]*model.Waterm
 	tmpFile := inFile + ".tmp"
 	if outFile != "" && inFile != outFile {
 		tmpFile = outFile
-		log.CLI.Printf("writing %s...\n", outFile)
+		logWritingTo(outFile)
 	} else {
-		log.CLI.Printf("writing %s...\n", inFile)
+		logWritingTo(inFile)
 	}
 	if f2, err = os.Create(tmpFile); err != nil {
 		f1.Close()
@@ -211,6 +223,10 @@ func AddWatermarksSliceMapFile(inFile, outFile string, m map[int][]*model.Waterm
 
 // AddWatermarks adds watermarks to all pages selected in rs and writes the result to w.
 func AddWatermarks(rs io.ReadSeeker, w io.Writer, selectedPages []string, wm *model.Watermark, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: AddWatermarks: missing rs")
+	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
@@ -222,7 +238,7 @@ func AddWatermarks(rs io.ReadSeeker, w io.Writer, selectedPages []string, wm *mo
 	}
 
 	fromStart := time.Now()
-	ctx, durRead, durVal, durOpt, err := readValidateAndOptimize(rs, conf, fromStart)
+	ctx, durRead, durVal, durOpt, err := ReadValidateAndOptimize(rs, conf, fromStart)
 	if err != nil {
 		return err
 	}
@@ -232,7 +248,7 @@ func AddWatermarks(rs io.ReadSeeker, w io.Writer, selectedPages []string, wm *mo
 	}
 
 	from := time.Now()
-	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true)
+	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true, true)
 	if err != nil {
 		return err
 	}
@@ -241,7 +257,9 @@ func AddWatermarks(rs io.ReadSeeker, w io.Writer, selectedPages []string, wm *mo
 		return err
 	}
 
-	log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	if log.StatsEnabled() {
+		log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	}
 
 	if conf.ValidationMode != model.ValidationNone {
 		if err = ValidateContext(ctx); err != nil {
@@ -274,9 +292,9 @@ func AddWatermarksFile(inFile, outFile string, selectedPages []string, wm *model
 	tmpFile := inFile + ".tmp"
 	if outFile != "" && inFile != outFile {
 		tmpFile = outFile
-		log.CLI.Printf("writing %s...\n", outFile)
+		logWritingTo(outFile)
 	} else {
-		log.CLI.Printf("writing %s...\n", inFile)
+		logWritingTo(inFile)
 	}
 	if f2, err = os.Create(tmpFile); err != nil {
 		f1.Close()
@@ -308,13 +326,17 @@ func AddWatermarksFile(inFile, outFile string, selectedPages []string, wm *model
 
 // RemoveWatermarks removes watermarks from all pages selected in rs and writes the result to w.
 func RemoveWatermarks(rs io.ReadSeeker, w io.Writer, selectedPages []string, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: RemoveWatermarks: missing rs")
+	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
 	conf.Cmd = model.REMOVEWATERMARKS
 
 	fromStart := time.Now()
-	ctx, durRead, durVal, durOpt, err := readValidateAndOptimize(rs, conf, fromStart)
+	ctx, durRead, durVal, durOpt, err := ReadValidateAndOptimize(rs, conf, fromStart)
 	if err != nil {
 		return err
 	}
@@ -324,7 +346,7 @@ func RemoveWatermarks(rs io.ReadSeeker, w io.Writer, selectedPages []string, con
 	}
 
 	from := time.Now()
-	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true)
+	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true, true)
 	if err != nil {
 		return err
 	}
@@ -333,7 +355,9 @@ func RemoveWatermarks(rs io.ReadSeeker, w io.Writer, selectedPages []string, con
 		return err
 	}
 
-	log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	if log.StatsEnabled() {
+		log.Stats.Printf("XRefTable:\n%s\n", ctx)
+	}
 
 	if conf.ValidationMode != model.ValidationNone {
 		if err = ValidateContext(ctx); err != nil {
@@ -366,9 +390,9 @@ func RemoveWatermarksFile(inFile, outFile string, selectedPages []string, conf *
 	tmpFile := inFile + ".tmp"
 	if outFile != "" && inFile != outFile {
 		tmpFile = outFile
-		log.CLI.Printf("writing %s...\n", outFile)
+		logWritingTo(outFile)
 	} else {
-		log.CLI.Printf("writing %s...\n", inFile)
+		logWritingTo(inFile)
 	}
 	if f2, err = os.Create(tmpFile); err != nil {
 		f1.Close()
@@ -400,10 +424,15 @@ func RemoveWatermarksFile(inFile, outFile string, selectedPages []string, conf *
 
 // HasWatermarks checks rs for watermarks.
 func HasWatermarks(rs io.ReadSeeker, conf *model.Configuration) (bool, error) {
+	if rs == nil {
+		return false, errors.New("pdfcpu: HasWatermarks: missing rs")
+	}
+
 	ctx, err := ReadContext(rs, conf)
 	if err != nil {
 		return false, err
 	}
+
 	if err := pdfcpu.DetectWatermarks(ctx); err != nil {
 		return false, err
 	}
@@ -433,7 +462,9 @@ func TextWatermark(text, desc string, onTop, update bool, u types.DisplayUnit) (
 	if err != nil {
 		return nil, err
 	}
+
 	wm.Update = update
+
 	return wm, nil
 }
 
@@ -443,7 +474,9 @@ func ImageWatermark(fileName, desc string, onTop, update bool, u types.DisplayUn
 	if err != nil {
 		return nil, err
 	}
+
 	wm.Update = update
+
 	return wm, nil
 }
 
@@ -453,8 +486,10 @@ func ImageWatermarkForReader(r io.Reader, desc string, onTop, update bool, u typ
 	if err != nil {
 		return nil, err
 	}
+
 	wm.Update = update
 	wm.Image = r
+
 	return wm, nil
 }
 
@@ -464,7 +499,9 @@ func PDFWatermark(fileName, desc string, onTop, update bool, u types.DisplayUnit
 	if err != nil {
 		return nil, err
 	}
+
 	wm.Update = update
+
 	return wm, nil
 }
 
@@ -474,10 +511,12 @@ func AddTextWatermarksFile(inFile, outFile string, selectedPages []string, onTop
 	if conf != nil {
 		unit = conf.Unit
 	}
+
 	wm, err := TextWatermark(text, desc, onTop, false, unit)
 	if err != nil {
 		return err
 	}
+
 	return AddWatermarksFile(inFile, outFile, selectedPages, wm, conf)
 }
 
@@ -487,10 +526,12 @@ func AddImageWatermarksFile(inFile, outFile string, selectedPages []string, onTo
 	if conf != nil {
 		unit = conf.Unit
 	}
+
 	wm, err := ImageWatermark(fileName, desc, onTop, false, unit)
 	if err != nil {
 		return err
 	}
+
 	return AddWatermarksFile(inFile, outFile, selectedPages, wm, conf)
 }
 
@@ -500,10 +541,12 @@ func AddImageWatermarksForReaderFile(inFile, outFile string, selectedPages []str
 	if conf != nil {
 		unit = conf.Unit
 	}
+
 	wm, err := ImageWatermarkForReader(r, desc, onTop, false, unit)
 	if err != nil {
 		return err
 	}
+
 	return AddWatermarksFile(inFile, outFile, selectedPages, wm, conf)
 }
 
@@ -513,10 +556,12 @@ func AddPDFWatermarksFile(inFile, outFile string, selectedPages []string, onTop 
 	if conf != nil {
 		unit = conf.Unit
 	}
+
 	wm, err := PDFWatermark(fileName, desc, onTop, false, unit)
 	if err != nil {
 		return err
 	}
+
 	return AddWatermarksFile(inFile, outFile, selectedPages, wm, conf)
 }
 
@@ -526,10 +571,12 @@ func UpdateTextWatermarksFile(inFile, outFile string, selectedPages []string, on
 	if conf != nil {
 		unit = conf.Unit
 	}
+
 	wm, err := TextWatermark(text, desc, onTop, true, unit)
 	if err != nil {
 		return err
 	}
+
 	return AddWatermarksFile(inFile, outFile, selectedPages, wm, conf)
 }
 
@@ -552,9 +599,11 @@ func UpdatePDFWatermarksFile(inFile, outFile string, selectedPages []string, onT
 	if conf != nil {
 		unit = conf.Unit
 	}
+
 	wm, err := PDFWatermark(fileName, desc, onTop, true, unit)
 	if err != nil {
 		return err
 	}
+
 	return AddWatermarksFile(inFile, outFile, selectedPages, wm, conf)
 }

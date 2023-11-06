@@ -18,18 +18,19 @@ jobs:
             goarch: amd64
         go:
            - '1.20.x'
+           - '1.21.x'
     runs-on: ubuntu-latest
 
     steps:
       - name: Set up Go ${{ matrix.go }}
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v4
         with:
           go-version: ${{ matrix.go }}
 
       - run: go version
 
       - name: Checkout repo      
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Go vet
         run: go vet -v ./...

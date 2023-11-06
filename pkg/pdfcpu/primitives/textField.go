@@ -19,8 +19,7 @@ package primitives
 import (
 	"bytes"
 	"fmt"
-	"strconv"
-	"strings"
+	"io"
 
 	"unicode/utf8"
 
@@ -29,7 +28,6 @@ import (
 	pdffont "github.com/pdfcpu/pdfcpu/pkg/pdfcpu/font"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/format"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
-
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
 	"github.com/pkg/errors"
 )
@@ -227,42 +225,22 @@ func (tf *TextField) validate() error {
 	return tf.validateTab()
 }
 
-func (tf *TextField) calcFontFromDA(ctx *model.Context, da []string, fonts map[string]types.IndirectRef) (*types.IndirectRef, error) {
+func (tf *TextField) calcFontFromDA(ctx *model.Context, d types.Dict, fonts map[string]types.IndirectRef) (*types.IndirectRef, error) {
 
-	var (
-		f      FormFont
-		fontID string
-	)
-
-	f.SetCol(color.Black)
-	for i := 0; i < len(da); i++ {
-		if da[i] == "Tf" {
-			fontID = da[i-2][1:]
-			tf.SetFontID(fontID)
-			fl, err := strconv.ParseFloat(da[i-1], 64)
-			if err != nil {
-				return nil, err
-			}
-			f.Size = int(fl)
-			continue
-		}
-		if da[i] == "rg" {
-			r, _ := strconv.ParseFloat(da[i-3], 32)
-			g, _ := strconv.ParseFloat(da[i-2], 32)
-			b, _ := strconv.ParseFloat(da[i-1], 32)
-			f.SetCol(color.SimpleColor{R: float32(r), G: float32(g), B: float32(b)})
-		}
-		if da[i] == "g" {
-			g, _ := strconv.ParseFloat(da[i-1], 32)
-			f.SetCol(color.SimpleColor{R: float32(g), G: float32(g), B: float32(g)})
+	s := d.StringEntry("DA")
+	if s == nil {
+		s = ctx.Form.StringEntry("DA")
+		if s == nil {
+			return nil, errors.New("pdfcpu: textfield missing \"DA\"")
 		}
 	}
 
-	if len(tf.fontID) == 0 {
-		return nil, errors.New("pdfcpu: unable to detect font id")
+	fontID, f, err := fontFromDA(*s)
+	if err != nil {
+		return nil, err
 	}
 
-	tf.Font = &f
+	tf.Font, tf.fontID = &f, fontID
 
 	id, name, lang, fontIndRef, err := extractFormFontDetails(ctx, tf.fontID, fonts)
 	if err != nil {
@@ -385,6 +363,20 @@ func (tf *TextField) labelPos(labelHeight, w, g float64) (float64, float64) {
 	return x, y
 }
 
+func (tf *TextField) renderBackground(w io.Writer, bgCol, boCol *color.SimpleColor, boWidth, width, height float64) {
+	if bgCol != nil || (boCol != nil && boWidth > 0) {
+		fmt.Fprint(w, "q ")
+		if bgCol != nil {
+			fmt.Fprintf(w, "%.2f %.2f %.2f rg 0 0 %.2f %.2f re f ", bgCol.R, bgCol.G, bgCol.B, width, height)
+		}
+		if boCol != nil && boWidth > 0 {
+			fmt.Fprintf(w, "%.2f %.2f %.2f RG %.2f w %.2f %.2f %.2f %.2f re s ",
+				boCol.R, boCol.G, boCol.B, boWidth, boWidth/2, boWidth/2, width-boWidth, height-boWidth)
+		}
+		fmt.Fprint(w, "Q ")
+	}
+}
+
 func (tf *TextField) renderN(xRefTable *model.XRefTable) ([]byte, error) {
 
 	w, h := tf.BoundingBox.Width(), tf.BoundingBox.Height()
@@ -392,17 +384,7 @@ func (tf *TextField) renderN(xRefTable *model.XRefTable) ([]byte, error) {
 	boWidth, boCol := tf.calcBorder()
 	buf := new(bytes.Buffer)
 
-	if bgCol != nil || boCol != nil {
-		fmt.Fprint(buf, "q ")
-		if bgCol != nil {
-			fmt.Fprintf(buf, "%.2f %.2f %.2f rg 0 0 %.2f %.2f re f ", bgCol.R, bgCol.G, bgCol.B, w, h)
-		}
-		if boCol != nil {
-			fmt.Fprintf(buf, "%.2f %.2f %.2f RG %.2f w %.2f %.2f %.2f %.2f re s ",
-				boCol.R, boCol.G, boCol.B, boWidth, boWidth/2, boWidth/2, w-boWidth, h-boWidth)
-		}
-		fmt.Fprint(buf, "Q ")
-	}
+	tf.renderBackground(buf, bgCol, boCol, boWidth, w, h)
 
 	f := tf.Font
 
@@ -545,14 +527,7 @@ func (tf *TextField) calcBorder() (boWidth float64, boCol *color.SimpleColor) {
 	return tf.Border.calc()
 }
 
-func (tf *TextField) prepareDict(fonts model.FontMap) (types.Dict, error) {
-	pdf := tf.pdf
-
-	id, err := types.EscapeUTF16String(tf.ID)
-	if err != nil {
-		return nil, err
-	}
-
+func (tf *TextField) prepareFF() FieldFlags {
 	ff := FieldDoNotSpellCheck
 	if tf.Multiline {
 		// If FieldMultiline set, the field may contain multiple lines of text;
@@ -573,27 +548,10 @@ func (tf *TextField) prepareDict(fonts model.FontMap) (types.Dict, error) {
 		ff += FieldReadOnly
 	}
 
-	d := types.Dict(
-		map[string]types.Object{
-			"Type":    types.Name("Annot"),
-			"Subtype": types.Name("Widget"),
-			"FT":      types.Name("Tx"),
-			"Rect":    tf.BoundingBox.Array(), // TODO 12 digits after comma!!!
-			"F":       types.Integer(model.AnnPrint),
-			"Ff":      types.Integer(ff),
-			"Q":       types.Integer(tf.HorAlign), // Adjustment: (0:L) 1:C 2:R
-			"T":       types.StringLiteral(*id),
-		},
-	)
+	return ff
+}
 
-	if tf.Tip != "" {
-		tu, err := types.EscapeUTF16String(tf.Tip)
-		if err != nil {
-			return nil, err
-		}
-		d["TU"] = types.StringLiteral(*tu)
-	}
-
+func (tf *TextField) handleBorderAndMK(d types.Dict) {
 	bgCol := tf.BgCol
 	if bgCol == nil {
 		bgCol = tf.content.page.bgCol
@@ -619,6 +577,40 @@ func (tf *TextField) prepareDict(fonts model.FontMap) (types.Dict, error) {
 	if boWidth > 0 {
 		d["Border"] = types.NewNumberArray(0, 0, boWidth)
 	}
+}
+
+func (tf *TextField) prepareDict(fonts model.FontMap) (types.Dict, error) {
+	pdf := tf.pdf
+
+	id, err := types.EscapeUTF16String(tf.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	ff := tf.prepareFF()
+
+	d := types.Dict(
+		map[string]types.Object{
+			"Type":    types.Name("Annot"),
+			"Subtype": types.Name("Widget"),
+			"FT":      types.Name("Tx"),
+			"Rect":    tf.BoundingBox.Array(),
+			"F":       types.Integer(model.AnnPrint),
+			"Ff":      types.Integer(ff),
+			"Q":       types.Integer(tf.HorAlign),
+			"T":       types.StringLiteral(*id),
+		},
+	)
+
+	if tf.Tip != "" {
+		tu, err := types.EscapeUTF16String(tf.Tip)
+		if err != nil {
+			return nil, err
+		}
+		d["TU"] = types.StringLiteral(*tu)
+	}
+
+	tf.handleBorderAndMK(d)
 
 	if tf.Value != "" {
 		s, err := types.EscapeUTF16String(tf.Value)
@@ -892,12 +884,7 @@ func NewTextField(
 
 	tf.BoundingBox = types.RectForDim(bb.Width(), bb.Height())
 
-	s := d.StringEntry("DA")
-	if s == nil {
-		return nil, nil, errors.New("pdfcpu: textfield missing \"DA\"")
-	}
-
-	fontIndRef, err := tf.calcFontFromDA(ctx, strings.Split(*s, " "), fonts)
+	fontIndRef, err := tf.calcFontFromDA(ctx, d, fonts)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -917,7 +904,7 @@ func NewTextField(
 	boWidth := calcBorderWidth(d)
 	if boWidth > 0 {
 		b.Width = boWidth
-		b.SetCol(*boCol)
+		b.col = boCol
 	}
 	tf.Border = &b
 

@@ -25,6 +25,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/types"
+	"github.com/pkg/errors"
 )
 
 // BookletFromImages creates a booklet from images.
@@ -57,12 +58,18 @@ func BookletFromImages(conf *model.Configuration, imageFileNames []string, nup *
 
 // Booklet arranges PDF pages on larger sheets of paper and writes the result to w.
 func Booklet(rs io.ReadSeeker, w io.Writer, imgFiles, selectedPages []string, nup *model.NUp, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: Booklet: missing rs")
+	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
 	conf.Cmd = model.BOOKLET
 
-	log.Info.Printf("%s", nup)
+	if log.InfoEnabled() {
+		log.Info.Printf("%s", nup)
+	}
 
 	var (
 		ctx *model.Context
@@ -85,7 +92,7 @@ func Booklet(rs io.ReadSeeker, w io.Writer, imgFiles, selectedPages []string, nu
 			return err
 		}
 
-		pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true)
+		pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true, true)
 		if err != nil {
 			return err
 		}
@@ -112,7 +119,6 @@ func Booklet(rs io.ReadSeeker, w io.Writer, imgFiles, selectedPages []string, nu
 
 // BookletFile rearranges PDF pages or images into a booklet layout and writes the result to outFile.
 func BookletFile(inFiles []string, outFile string, selectedPages []string, nup *model.NUp, conf *model.Configuration) (err error) {
-
 	var f1, f2 *os.File
 
 	// booklet from a PDF
@@ -124,7 +130,7 @@ func BookletFile(inFiles []string, outFile string, selectedPages []string, nup *
 		f1.Close()
 		return err
 	}
-	log.CLI.Printf("writing %s...\n", outFile)
+	logWritingTo(outFile)
 
 	defer func() {
 		if err != nil {

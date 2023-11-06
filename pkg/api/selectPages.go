@@ -140,7 +140,6 @@ func handleSuffix(v string, negated bool, pageCount int, selectedPages types.Int
 }
 
 func handleSpecificPageOrLastXPages(s string, negated bool, pageCount int, selectedPages types.IntSet) error {
-
 	// l
 	if s == "l" {
 		selectedPages[pageCount] = !negated
@@ -268,7 +267,7 @@ func sortedPages(selectedPages types.IntSet) []int {
 }
 
 func logSelPages(selectedPages types.IntSet) {
-	if !log.IsCLILoggerEnabled() || len(selectedPages) == 0 {
+	if !log.CLIEnabled() || len(selectedPages) == 0 {
 		return
 	}
 	var b strings.Builder
@@ -280,14 +279,12 @@ func logSelPages(selectedPages types.IntSet) {
 		s = s[:len(s)-1]
 	}
 	// TODO Suppress for multifile cmds
-	log.CLI.Printf("pages: %s\n", s)
+	if log.CLIEnabled() {
+		log.CLI.Printf("pages: %s\n", s)
+	}
 }
 
-// selectedPages returns a set of used page numbers.
-// key==page# => key 0 unused!
-func selectedPages(pageCount int, pageSelection []string) (types.IntSet, error) {
-	selectedPages := types.IntSet{}
-
+func calcSelPages(pageCount int, pageSelection []string, selectedPages types.IntSet) error {
 	for _, v := range pageSelection {
 
 		//log.Stats.Printf("pageExp: <%s>\n", v)
@@ -315,7 +312,7 @@ func selectedPages(pageCount int, pageSelection []string) (types.IntSet, error) 
 			v = v[1:]
 
 			if err := handlePrefix(v, negated, pageCount, selectedPages); err != nil {
-				return nil, err
+				return err
 			}
 
 			continue
@@ -325,7 +322,7 @@ func selectedPages(pageCount int, pageSelection []string) (types.IntSet, error) 
 		if v[0] != 'l' && strings.HasSuffix(v, "-") {
 
 			if err := handleSuffix(v[:len(v)-1], negated, pageCount, selectedPages); err != nil {
-				return nil, err
+				return err
 			}
 
 			continue
@@ -334,7 +331,7 @@ func selectedPages(pageCount int, pageSelection []string) (types.IntSet, error) 
 		// l l-# l-#-
 		if v[0] == 'l' {
 			if err := handleSpecificPageOrLastXPages(v, negated, pageCount, selectedPages); err != nil {
-				return nil, err
+				return err
 			}
 			continue
 		}
@@ -344,7 +341,7 @@ func selectedPages(pageCount int, pageSelection []string) (types.IntSet, error) 
 			// v contains '-' somewhere in the middle
 			// #-# #-l #-l-#
 			if err := parsePageRange(pr, pageCount, negated, selectedPages); err != nil {
-				return nil, err
+				return err
 			}
 
 			continue
@@ -352,20 +349,35 @@ func selectedPages(pageCount int, pageSelection []string) (types.IntSet, error) 
 
 		// #
 		if err := handleSpecificPageOrLastXPages(pr[0], negated, pageCount, selectedPages); err != nil {
-			return nil, err
+			return err
 		}
 
 	}
 
-	logSelPages(selectedPages)
+	return nil
+}
+
+// selectedPages returns a set of used page numbers.
+// key==page# => key 0 unused!
+func selectedPages(pageCount int, pageSelection []string, log bool) (types.IntSet, error) {
+	selectedPages := types.IntSet{}
+
+	if err := calcSelPages(pageCount, pageSelection, selectedPages); err != nil {
+		return nil, err
+	}
+
+	if log {
+		logSelPages(selectedPages)
+	}
+
 	return selectedPages, nil
 }
 
 // PagesForPageSelection ensures a set of page numbers for an ascending page sequence
 // where each page number may appear only once.
-func PagesForPageSelection(pageCount int, pageSelection []string, ensureAllforNone bool) (types.IntSet, error) {
+func PagesForPageSelection(pageCount int, pageSelection []string, ensureAllforNone bool, log bool) (types.IntSet, error) {
 	if len(pageSelection) > 0 {
-		return selectedPages(pageCount, pageSelection)
+		return selectedPages(pageCount, pageSelection, log)
 	}
 	if !ensureAllforNone {
 		//log.CLI.Printf("pages: none\n")
@@ -476,7 +488,6 @@ func handleSuffixForCollection(v string, negated bool, pageCount int, cp *[]int)
 }
 
 func handleSpecificPageOrLastXPagesForCollection(s string, negated bool, pageCount int, cp *[]int) error {
-
 	// l
 	if s == "l" {
 		processPageForCollection(cp, negated, pageCount)

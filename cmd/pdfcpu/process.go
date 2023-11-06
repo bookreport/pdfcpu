@@ -23,6 +23,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -147,7 +148,7 @@ func process(cmd *cli.Command) {
 			fmt.Fprintln(os.Stdout, s)
 		}
 	}
-	os.Exit(0)
+	//os.Exit(0)
 }
 
 func processValidateCommand(conf *model.Configuration) {
@@ -251,6 +252,26 @@ func processSplitCommand(conf *model.Configuration) {
 	process(cli.SplitCommand(inFile, outDir, span, conf))
 }
 
+func sortFiles(filesIn []string) {
+
+	// See PR #631
+
+	re := regexp.MustCompile(`\d+`)
+
+	sort.Slice(
+		filesIn,
+		func(i, j int) bool {
+			ssi := re.FindAllString(filesIn[i], 1)
+			ssj := re.FindAllString(filesIn[j], 1)
+			if len(ssi) == 0 || len(ssj) == 0 {
+				return filesIn[i] <= filesIn[j]
+			}
+			i1, _ := strconv.Atoi(ssi[0])
+			i2, _ := strconv.Atoi(ssj[0])
+			return i1 < i2
+		})
+}
+
 func processMergeCommand(conf *model.Configuration) {
 	if mode == "" {
 		mode = "create"
@@ -294,8 +315,15 @@ func processMergeCommand(conf *model.Configuration) {
 	}
 
 	if sorted {
-		sort.Strings(filesIn)
+		sortFiles(filesIn)
 	}
+
+	if conf == nil {
+		conf = model.NewDefaultConfiguration()
+		conf.CreateBookmarks = bookmarks
+	}
+
+	conf.CreateBookmarks = bookmarks
 
 	var cmd *cli.Command
 
@@ -1279,14 +1307,26 @@ func processDiplayUnit(conf *model.Configuration) {
 }
 
 func processInfoCommand(conf *model.Configuration) {
-	if len(flag.Args()) != 1 {
+	if len(flag.Args()) < 1 {
 		fmt.Fprintf(os.Stderr, "%s\n\n", usageInfo)
 		os.Exit(1)
 	}
 
-	inFile := flag.Arg(0)
-	if conf.CheckFileNameExt {
-		ensurePDFExtension(inFile)
+	filesIn := []string{}
+	for _, arg := range flag.Args() {
+		if strings.Contains(arg, "*") {
+			matches, err := filepath.Glob(arg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%s", err)
+				os.Exit(1)
+			}
+			filesIn = append(filesIn, matches...)
+			continue
+		}
+		if conf.CheckFileNameExt {
+			ensurePDFExtension(arg)
+		}
+		filesIn = append(filesIn, arg)
 	}
 
 	selectedPages, err := api.ParsePageSelection(selectedPages)
@@ -1297,7 +1337,7 @@ func processInfoCommand(conf *model.Configuration) {
 
 	processDiplayUnit(conf)
 
-	process(cli.InfoCommand(inFile, selectedPages, conf))
+	process(cli.InfoCommand(filesIn, selectedPages, json, conf))
 }
 
 func processListFontsCommand(conf *model.Configuration) {
@@ -1772,15 +1812,16 @@ func processCreateCommand(conf *model.Configuration) {
 
 	inFile, outFile := "", ""
 	if len(flag.Args()) == 2 {
-		inFile := flag.Arg(1)
-		ensurePDFExtension(inFile)
-		outFile = inFile
-	} else {
 		outFile = flag.Arg(1)
+		ensurePDFExtension(outFile)
+	} else {
+		inFile = flag.Arg(1)
+		ensurePDFExtension(inFile)
+		outFile = flag.Arg(2)
 		ensurePDFExtension(outFile)
 	}
 
-	process(cli.CreateCommand(inFileJSON, inFile, outFile, conf))
+	process(cli.CreateCommand(inFile, inFileJSON, outFile, conf))
 }
 
 func processListFormFieldsCommand(conf *model.Configuration) {
@@ -2055,4 +2096,223 @@ func processResizeCommand(conf *model.Configuration) {
 	}
 
 	process(cli.ResizeCommand(inFile, outFile, selectedPages, rc, conf))
+}
+
+func processPosterCommand(conf *model.Configuration) {
+	if len(flag.Args()) < 3 || len(flag.Args()) > 4 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", usagePoster)
+		os.Exit(1)
+	}
+
+	processDiplayUnit(conf)
+
+	// formsize(=papersize) or dimensions, optionally: scalefactor, border, margin, bgcolor
+	cut, err := pdfcpu.ParseCutConfigForPoster(flag.Arg(0), conf.Unit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(1)
+	if conf.CheckFileNameExt {
+		ensurePDFExtension(inFile)
+	}
+
+	outDir := flag.Arg(2)
+
+	selectedPages, err := api.ParsePageSelection(selectedPages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "problem with flag selectedPages: %v\n", err)
+		os.Exit(1)
+	}
+
+	var outFile string
+	if len(flag.Args()) == 4 {
+		outFile = flag.Arg(3)
+	}
+
+	process(cli.PosterCommand(inFile, outDir, outFile, selectedPages, cut, conf))
+}
+
+func processNDownCommand(conf *model.Configuration) {
+	if len(flag.Args()) < 3 || len(flag.Args()) > 5 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", usageNDown)
+		os.Exit(1)
+	}
+
+	processDiplayUnit(conf)
+
+	selectedPages, err := api.ParsePageSelection(selectedPages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "problem with flag selectedPages: %v\n", err)
+		os.Exit(1)
+	}
+
+	var inFile, outDir string
+
+	n, err := strconv.Atoi(flag.Arg(0))
+	if err == nil {
+		// pdfcpu ndown n inFile outDir outFile
+
+		// Optionally: border, margin, bgcolor
+		cut, err := pdfcpu.ParseCutConfigForN(n, "", conf.Unit)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%v\n", err)
+			os.Exit(1)
+		}
+		inFile = flag.Arg(1)
+		if conf.CheckFileNameExt {
+			ensurePDFExtension(inFile)
+		}
+		outDir = flag.Arg(2)
+
+		var outFile string
+		if len(flag.Args()) == 4 {
+			outFile = flag.Arg(3)
+		}
+
+		process(cli.NDownCommand(inFile, outDir, outFile, selectedPages, n, cut, conf))
+	}
+
+	// pdfcpu ndown description n inFile outDir outFile
+
+	n, err = strconv.Atoi(flag.Arg(1))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	// Optionally: border, margin, bgcolor
+	cut, err := pdfcpu.ParseCutConfigForN(n, flag.Arg(0), conf.Unit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	inFile = flag.Arg(2)
+	if conf.CheckFileNameExt {
+		ensurePDFExtension(inFile)
+	}
+	outDir = flag.Arg(3)
+
+	var outFile string
+	if len(flag.Args()) == 5 {
+		outFile = flag.Arg(4)
+	}
+
+	process(cli.NDownCommand(inFile, outDir, outFile, selectedPages, n, cut, conf))
+}
+
+func processCutCommand(conf *model.Configuration) {
+	if len(flag.Args()) < 3 || len(flag.Args()) > 4 {
+		fmt.Fprintf(os.Stderr, "usage: %s\n", usageCut)
+		os.Exit(1)
+	}
+
+	processDiplayUnit(conf)
+
+	// required: at least one of horizontalCut, verticalCut
+	// optionally: border, margin, bgcolor
+	cut, err := pdfcpu.ParseCutConfig(flag.Arg(0), conf.Unit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(1)
+	if conf.CheckFileNameExt {
+		ensurePDFExtension(inFile)
+	}
+
+	outDir := flag.Arg(2)
+
+	selectedPages, err := api.ParsePageSelection(selectedPages)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "problem with flag selectedPages: %v\n", err)
+		os.Exit(1)
+	}
+
+	var outFile string
+	if len(flag.Args()) >= 4 {
+		outFile = flag.Arg(3)
+	}
+
+	process(cli.CutCommand(inFile, outDir, outFile, selectedPages, cut, conf))
+}
+
+func processListBookmarksCommand(conf *model.Configuration) {
+	if len(flag.Args()) < 1 || selectedPages != "" {
+		fmt.Fprintf(os.Stderr, "usage: %s\n\n", usageBookmarksList)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(0)
+	if conf.CheckFileNameExt {
+		ensurePDFExtension(inFile)
+	}
+
+	process(cli.ListBookmarksCommand(inFile, conf))
+}
+
+func processExportBookmarksCommand(conf *model.Configuration) {
+	if len(flag.Args()) == 0 || len(flag.Args()) > 2 || selectedPages != "" {
+		fmt.Fprintf(os.Stderr, "usage: %s\n\n", usageBookmarksExport)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(0)
+	if conf.CheckFileNameExt {
+		ensurePDFExtension(inFile)
+	}
+
+	outFileJSON := "out.json"
+	if len(flag.Args()) == 2 {
+		outFileJSON = flag.Arg(1)
+		ensureJSONExtension(outFileJSON)
+	}
+
+	process(cli.ExportBookmarksCommand(inFile, outFileJSON, conf))
+}
+
+func processImportBookmarksCommand(conf *model.Configuration) {
+	if len(flag.Args()) == 0 || len(flag.Args()) > 3 || selectedPages != "" {
+		fmt.Fprintf(os.Stderr, "usage: %s\n\n", usageBookmarksImport)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(0)
+	if conf.CheckFileNameExt {
+		ensurePDFExtension(inFile)
+	}
+
+	inFileJSON := flag.Arg(1)
+	ensureJSONExtension(inFileJSON)
+
+	outFile := ""
+	if len(flag.Args()) == 3 {
+		outFile = flag.Arg(2)
+		ensurePDFExtension(outFile)
+	}
+
+	process(cli.ImportBookmarksCommand(inFile, inFileJSON, outFile, replaceBookmarks, conf))
+}
+
+func processRemoveBookmarksCommand(conf *model.Configuration) {
+	if len(flag.Args()) == 0 || len(flag.Args()) > 2 || selectedPages != "" {
+		fmt.Fprintf(os.Stderr, "usage: %s\n\n", usageBookmarksExport)
+		os.Exit(1)
+	}
+
+	inFile := flag.Arg(0)
+	if conf.CheckFileNameExt {
+		ensurePDFExtension(inFile)
+	}
+
+	outFile := ""
+	if len(flag.Args()) == 2 {
+		outFile = flag.Arg(1)
+		ensurePDFExtension(outFile)
+	}
+
+	process(cli.RemoveBookmarksCommand(inFile, outFile, conf))
 }

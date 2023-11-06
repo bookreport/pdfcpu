@@ -28,6 +28,7 @@ The commands are:
    annotations   list, remove page annotations
    attachments   list, add, remove, extract embedded file attachments
    booklet       arrange pages onto larger sheets of paper to make a booklet or zine
+   bookmarks     list, import, export, remove bookmarks
    boxes         list, add, remove page boundaries for selected pages
    changeopw     change owner password
    changeupw     change user password
@@ -35,6 +36,7 @@ The commands are:
    config        print configuration
    create        create PDF content including forms via JSON
    crop          set cropbox for selected pages
+   cut           custom cut pages horizontally or vertically
    decrypt       remove password protection
    encrypt       set password protection		
    extract       extract images, fonts, content, pages or metadata
@@ -46,12 +48,14 @@ The commands are:
    info          print file info
    keywords      list, add, remove keywords
    merge         concatenate PDFs
+   ndown         cut selected pages into n pages symmetrically
    nup           rearrange pages or images for reduced number of pages
    optimize      optimize PDF by getting rid of redundant page resources
    pages         insert, remove selected pages
    paper         print list of supported paper sizes
    permissions   list, set user access permissions
    portfolio     list, add, remove, extract portfolio entries with optional description
+   poster        cut selected pages into poster using paper size or dimensions
    properties    list, add, remove document properties
    resize        scale selected pages
    rotate        rotate selected pages
@@ -99,14 +103,14 @@ relaxed ... (default) like strict but doesn't complain about common seen spec vi
 
      stats ... appends a stats line to a csv file with information about the usage of root and page entries.
                useful for batch optimization and debugging PDFs.
-    inFile ... input pdf file
-   outFile ... output pdf file`
+    inFile ... input PDF file
+   outFile ... output PDF file`
 
 	usageSplit     = "usage: pdfcpu split [-m(ode) span|bookmark] inFile outDir [span]" + generalFlags
 	usageLongSplit = `Generate a set of PDFs for the input file in outDir according to given span value or along bookmarks.
 
       mode ... split mode (defaults to span)
-    inFile ... input pdf file
+    inFile ... input PDF file
     outDir ... output directory
       span ... split span in pages (default: 1) for mode "span"
       
@@ -119,20 +123,23 @@ The split modes are:
                    span will be ignored.
                    Assumption: inFile contains an outline dictionary.`
 
-	usageMerge     = "usage: pdfcpu merge [-m(ode) create|append] [-s(ort)] outFile inFile..." + generalFlags
+	usageMerge     = "usage: pdfcpu merge [-m(ode) create|append] [-s(ort) -b(ookmarks)] outFile inFile..." + generalFlags
 	usageLongMerge = `Concatenate a sequence of PDFs/inFiles into outFile.
 
       mode ... merge mode (defaults to create)
       sort ... sort inFiles by file name
-   outFile ... output pdf file
-    inFile ... a list of pdf files subject to concatenation.
+ bookmarks ... create bookmarks
+   outFile ... output PDF file
+    inFile ... a list of PDF files subject to concatenation.
     
 The merge modes are:
 
     create ... outFile will be created and possibly overwritten (default).
 
     append ... if outFile does not exist, it will be created (like in default mode).
-               if outFile already exists, inFiles will be appended to outFile.`
+               if outFile already exists, inFiles will be appended to outFile.
+               
+Skip bookmark creation like so: -bookmarks=false`
 
 	usagePageSelection = `'-pages' selects pages for processing and is a comma separated list of expressions:
 
@@ -159,7 +166,7 @@ The merge modes are:
 
       mode ... extraction mode
      pages ... Please refer to "pdfcpu selectedpages"
-    inFile ... input pdf file
+    inFile ... input PDF file
     outDir ... output directory
 
  The extraction modes are:
@@ -176,8 +183,8 @@ content ... extract raw page content
 	usageLongTrim = `Generate a trimmed version of inFile for selected pages.
 
      pages ... Please refer to "pdfcpu selectedpages"
-    inFile ... input pdf file
-   outFile ... output pdf file
+    inFile ... input PDF file
+   outFile ... output PDF file
    
 `
 
@@ -193,7 +200,7 @@ content ... extract raw page content
 
 	usageLongAttach = `Manage embedded file attachments.
 
-    inFile ... input pdf file
+    inFile ... input PDF file
       file ... attachment
     outDir ... output directory
     
@@ -212,7 +219,7 @@ content ... extract raw page content
 
 	usageLongPortfolio = `Manage portfolio entries.
 
-    inFile ... input pdf file
+    inFile ... input PDF file
       file ... attachment
       desc ... description (optional)
     outDir ... output directory
@@ -233,7 +240,7 @@ content ... extract raw page content
 	usageLongPerm = `Manage user access permissions.
 
       perm ... user access permissions
-    inFile ... input pdf file`
+    inFile ... input PDF file`
 
 	usageEncrypt     = "usage: pdfcpu encrypt [-m(ode) rc4|aes] [-key 40|128|256] [-perm none|print|all] [-upw userpw] -opw ownerpw inFile [outFile]" + generalFlags
 	usageLongEncrypt = `Setup password protection based on user and owner password.
@@ -241,20 +248,20 @@ content ... extract raw page content
       mode ... algorithm (default=aes)
        key ... key length in bits (default=256)
       perm ... user access permissions
-    inFile ... input pdf file
-   outFile ... output pdf file`
+    inFile ... input PDF file
+   outFile ... output PDF file`
 
 	usageDecrypt     = "usage: pdfcpu decrypt [-upw userpw] [-opw ownerpw] inFile [outFile]" + generalFlags
 	usageLongDecrypt = `Remove password protection and reset permissions.
 
-    inFile ... input pdf file
-   outFile ... output pdf file`
+    inFile ... input PDF file
+   outFile ... output PDF file`
 
 	usageChangeUserPW     = "usage: pdfcpu changeupw [-opw ownerpw] inFile upwOld upwNew" + generalFlags
 	usageLongChangeUserPW = `Change the user password also known as the open doc password.
 
        opw ... owner password, required unless = ""
-    inFile ... input pdf file
+    inFile ... input PDF file
     upwOld ... old user password
     upwNew ... new user password`
 
@@ -262,7 +269,7 @@ content ... extract raw page content
 	usageLongChangeOwnerPW = `Change the owner password also known as the set permissions password.
 
        upw ... user password, required unless = ""
-    inFile ... input pdf file
+    inFile ... input PDF file
     opwOld ... old owner password (provide user password on initial changeopw)
     opwNew ... new owner password`
 
@@ -304,10 +311,14 @@ content ... extract raw page content
          eg. pdfcpu watermark add -mode image -- "logo.png" "" in.pdf out.pdf
          
    3) PDF based
-      -mode pdf pdfFileName[:page#]
+      -mode pdf PDFFileName[:page#]
          eg. pdfcpu watermark add -mode pdf -- "stamp.pdf:3" "" in.pdf out.pdf ... watermark each page of in.pdf with page 3 of stamp.pdf
          Omit page# for multistamping:
          eg. pdfcpu watermark add -mode pdf -- "stamp.pdf" "" in.pdf out.pdf   ... watermark each page of in.pdf with corresponding page of stamp.pdf
+
+
+   A watermark is the first content that gets rendered for a page.
+   The visibility of the watermark depends on the transparency of all layers rendered on top.
 `
 	usageWMDescription = `
 
@@ -396,13 +407,13 @@ e.g. "pos:bl, off: 20 5"   "rot:45"                 "op:0.5, sc:0.5 abs, rot:0"
       pages ... Please refer to "pdfcpu selectedpages"
         upw ... user password
         opw ... owner password
-       mode ... text, image, pdf
+       mode ... text, image, PDF
      string ... display string for text based watermarks
-       file ... image or pdf file
+       file ... image or PDF file
 description ... fontname, points, position, offset, scalefactor, aligntext, rotation, 
                 diagonal, opacity, rendermode, strokecolor, fillcolor, bgcolor, margins, border
-     inFile ... input pdf file
-    outFile ... output pdf file
+     inFile ... input PDF file
+    outFile ... output PDF file
 
 ` + usageStampMode + usageWMDescription
 
@@ -417,13 +428,13 @@ description ... fontname, points, position, offset, scalefactor, aligntext, rota
 	usageLongWatermark = `Process watermarking for selected pages. 
 
       pages ... Please refer to "pdfcpu selectedpages"
-       mode ... text, image, pdf
+       mode ... text, image, PDF
      string ... display string for text based watermarks
-       file ... image or pdf file
+       file ... image or PDF file
 description ... fontname, points, position, offset, scalefactor, aligntext, rotation,
                 diagonal, opacity, rendermode, strokecolor, fillcolor, bgcolor, margins, border
-     inFile ... input pdf file
-    outFile ... output pdf file
+     inFile ... input PDF file
+    outFile ... output PDF file
 
 ` + usageWatermarkMode + usageWMDescription
 
@@ -434,7 +445,7 @@ Each imageFile will be rendered to a separate page.
 In its simplest form this converts an image into a PDF: "pdfcpu import img.pdf img.jpg"
 
 description ... dimensions, format, position, offset, scale factor, boxes
-    outFile ... output pdf file
+    outFile ... output PDF file
   imageFile ... a list of image files
   
   <description> is a comma separated configuration string containing:
@@ -490,8 +501,8 @@ description ... dimensions, format, position, offset, scale factor, boxes
 
       pages ... Please refer to "pdfcpu selectedpages"
        mode ... before, after (default: before)
-     inFile ... input pdf file
-    outFile ... output pdf file
+     inFile ... input PDF file
+    outFile ... output PDF file
 
 `
 
@@ -499,9 +510,9 @@ description ... dimensions, format, position, offset, scale factor, boxes
 	usageLongRotate = `Rotate selected pages by a multiple of 90 degrees. 
 
       pages ... Please refer to "pdfcpu selectedpages"
-     inFile ... input pdf file
+     inFile ... input PDF file
    rotation ... a multiple of 90 degrees for clockwise rotation
-    outFile ... output pdf file
+    outFile ... output PDF file
 
 `
 
@@ -512,19 +523,19 @@ If the input is one imageFile a single page n-up PDF gets generated.
 
       pages ... inFile only, please refer to "pdfcpu selectedpages"
 description ... dimensions, format, orientation
-    outFile ... output pdf file
+    outFile ... output PDF file
           n ... the n-Up value (see below for details)
-     inFile ... input pdf file
+     inFile ... input PDF file
  imageFiles ... input image file(s)
 
-                             portrait landscape
- Possible values for n: 2 ...  1x2       2x1
-                        3 ...  1x3       3x1
-                        4 ...  2x2
-                        8 ...  2x4       4x2
-                        9 ...  3x3
-                       12 ...  3x4       4x3
-                       16 ...  4x4
+                              portrait landscape
+ Supported values for n: 2 ...  1x2       2x1
+                         3 ...  1x3       3x1
+                         4 ...  2x2
+                         8 ...  2x4       4x2
+                         9 ...  3x3
+                        12 ...  3x4       4x3
+                        16 ...  4x4
 
     <description> is a comma separated configuration string containing:
 
@@ -574,9 +585,9 @@ Examples: pdfcpu nup out.pdf 4 in.pdf
 
               pages       ... for inFile only, please refer to "pdfcpu selectedpages"
               description ... dimensions, formsize, border, margin
-              outFile     ... output pdf file
+              outFile     ... output PDF file
               n           ... booklet style (2 or 4)
-              inFile      ... input pdf file
+              inFile      ... input PDF file
               imageFiles  ... input image file(s)
 
 There are two styles of booklet, depending on your page/input and sheet/output size:
@@ -643,10 +654,10 @@ This command produces poster like PDF pages convenient for page and image browsi
 
       pages ... Please refer to "pdfcpu selectedpages"
 description ... dimensions, format, orientation
-    outFile ... output pdf file
+    outFile ... output PDF file
           m ... grid lines
           n ... grid columns
-     inFile ... input pdf file
+     inFile ... input PDF file
  imageFiles ... input image file(s)
 
     <description> is a comma separated configuration string containing:
@@ -762,11 +773,12 @@ Examples: pdfcpu grid out.pdf 1 10 in.pdf
 	usageSelectedPages     = "usage: pdfcpu selectedpages"
 	usageLongSelectedPages = "Print definition of the -pages flag."
 
-	usageInfo     = "usage: pdfcpu info [-p(ages) selectedPages] inFile" + generalFlags
+	usageInfo     = "usage: pdfcpu info [-p(ages) selectedPages] [-j(son)] inFile..." + generalFlags
 	usageLongInfo = `Print info about a PDF file.
    
    pages ... Please refer to "pdfcpu selectedpages"
-  inFile ... input pdf file`
+    json ... Produce JSON output
+  inFile ... a list of PDF input files`
 
 	usageFontsList       = "pdfcpu fonts list"
 	usageFontsInstall    = "pdfcpu fonts install fontFiles..."
@@ -789,7 +801,7 @@ Create single page PDF cheat sheets in current dir.`
 
 	usageLongKeywords = `Manage keywords.
 
-    inFile ... input pdf file
+    inFile ... input PDF file
    keyword ... search keyword
     
     Eg. adding two keywords: 
@@ -809,7 +821,7 @@ Create single page PDF cheat sheets in current dir.`
 
 	usageLongProperties = `Manage document properties.
 
-       inFile ... input pdf file
+       inFile ... input PDF file
 nameValuePair ... 'name = value'
          name ... property name
      
@@ -822,8 +834,8 @@ nameValuePair ... 'name = value'
 	usageLongCollect = `Create custom sequence of selected pages. 
 
         pages ... Please refer to "pdfcpu selectedpages"
-       inFile ... input pdf file
-      outFile ... output pdf file
+       inFile ... input PDF file
+      outFile ... output PDF file
   
   `
 
@@ -876,8 +888,8 @@ box:
 
         pages ... Please refer to "pdfcpu selectedpages"
   description ... crop box definition abs. or rel. to media box
-       inFile ... input pdf file
-      outFile ... output pdf file
+       inFile ... input PDF file
+      outFile ... output PDF file
 
 Examples:
    pdfcpu crop -- "[0 0 500 500]" in.pdf ... crop a 500x500 points region located in lower left corner
@@ -898,8 +910,8 @@ Examples:
      boxTypes ... comma separated list of box types: m(edia), c(rop), t(rim), b(leed), a(rt)
         pages ... Please refer to "pdfcpu selectedpages"
   description ... box definitions abs. or rel. to parent box
-       inFile ... input pdf file
-      outFile ... output pdf file
+       inFile ... input PDF file
+      outFile ... output PDF file
 
 <description> is a sequence of box definitions and assignments:
 
@@ -926,7 +938,7 @@ Examples:
 	usageLongAnnots = `Manage annotations.
    
       pages ... Please refer to "pdfcpu selectedpages"
-     inFile ... input pdf file
+     inFile ... input PDF file
       objNr ... obj# from "pdfcpu annotations list"
     annotId ... id from "pdfcpu annotations list"
   annotType ... Text, Link, FreeText, Line, Square, Circle, Polygon, PolyLine, HighLight, Underline, Squiggly, StrikeOut, Stamp,
@@ -966,7 +978,7 @@ Examples:
 	usageLongImages = `Manage keywords.
 
      pages ... Please refer to "pdfcpu selectedpages"
-    inFile ... input pdf file
+    inFile ... input PDF file
     
     Example: pdfcpu images list -p "1-5" gallery.pdf
     `
@@ -977,27 +989,27 @@ Append new page content to existing page content in inFile and write result to o
 If inFile is absent outFile will be overwritten.
 
    inFileJSON ... input json file
-   inFile     ... optional input pdf file 
-   outFile    ... output pdf file
+   inFile     ... optional input PDF file 
+   outFile    ... output PDF file
 
 A minimalistic sample json:
 {
-	"pages": {
-		"1": {
-			"content": {
-				"text": [
-					{
-						"value": "Hello pdfcpu user!",
-						"anchor": "center",
-						"font": {
-							"name": "Helvetica",
-							"size": 12
-						}
-					}
-				]
-			}
-		}
-	}
+   "pages": {
+      "1": {
+         "content": {
+            "text": [
+               {
+                  "value": "Hello pdfcpu user!",
+                  "anchor": "center",
+                  "font": {
+                     "name": "Helvetica",
+                     "size": 12
+                   }
+               }
+            ]
+         }
+      }
+   }
 }
    
 For more info on json syntax & samples please refer to :
@@ -1005,10 +1017,10 @@ For more info on json syntax & samples please refer to :
    pdfcpu/pkg/samples/create/*`
 
 	usageFormListFields   = "pdfcpu form list   inFile..."
-	usageFormRemoveFields = "pdfcpu form remove inFile [outFile] fieldID..."
-	usageFormLock         = "pdfcpu form lock   inFile [outFile] [fieldID...]"
-	usageFormUnlock       = "pdfcpu form unlock inFile [outFile] [fieldID...]"
-	usageFormReset        = "pdfcpu form reset  inFile [outFile] [fieldID...]"
+	usageFormRemoveFields = "pdfcpu form remove inFile [outFile] <fieldID|fieldName>..."
+	usageFormLock         = "pdfcpu form lock   inFile [outFile] [fieldID|fieldName]..."
+	usageFormUnlock       = "pdfcpu form unlock inFile [outFile] [fieldID|fieldName]..."
+	usageFormReset        = "pdfcpu form reset  inFile [outFile] [fieldID|fieldName]..."
 	usageFormExport       = "pdfcpu form export inFile [outFileJSON]"
 	usageFormFill         = "pdfcpu form fill inFile inFileJSON [outFile]"
 	usageFormMultiFill    = "pdfcpu form multifill [-m(ode) single|merge] inFile inFileData outDir [outName]"
@@ -1024,14 +1036,16 @@ For more info on json syntax & samples please refer to :
 
 	usageLongForm = `Manage PDF forms.
 
-      mode       ... output mode (defaults to single)
-      inFile     ... input pdf file
-      inFileData ... input CSV or JSON file
-      outDir     ... output directory
-      outFile    ... output pdf file
-      fieldID    ... as listed by pdfcpu form list
-      outName    ... base output name
-
+      inFile      ... input PDF file
+      inFileData  ... input CSV or JSON file
+      inFileJSON  ... input JSON file
+      outFile     ... output PDF file
+      outFileJSON ... output JSON file
+      mode        ... output mode (defaults to single)
+      outDir      ... output directory
+      outName     ... base output name
+      fieldID     ... as indicated by "pdfcpu form list"
+      fieldName   ... as indicated by "pdfcpu form list"
 
 The output modes are:
 
@@ -1043,69 +1057,96 @@ The output modes are:
 Supported usecases:
 
    1) Get a list of form fields:
-         "pdfcpu form list in.pdf" returns a list of form fields of in.pdf eg. "firstName, lastName, dob".
+         "pdfcpu form list in.pdf" returns a list of form fields of in.pdf.
+         Each field is identified by its name and id.
    
    2) Remove some form fields:
-         "pdfcpu form remove in.pdf middleName birthPlace" removes the the two fields with ids "middleName" and "birthPlace".
+         "pdfcpu form remove in.pdf middleName birthPlace" removes the the two fields "middleName" and "birthPlace".
+         You may supply a mixed list of field ids and field names.
       
    3) Make some or all fields read-only:
          "pdfcpu form lock in.pdf dateOfBirth" turns the field "dateOfBirth" into read-only.
          "pdfcpu from lock in.pdf" makes the form read-only.
+         You may supply a mixed list of field ids and field names.
    
    4) Make some or all read-only fields writeable:
          "pdfcpu form unlock in.pdf dateOfBirth" makes the field "dateOfBirth" writeable.
          "pdfcpu form unlock in.pdf" makes all fields of in.pdf writeable.
+         You may supply a mixed list of field ids and field names.
    
    5) Clear some or all fields:
          "pdfcpu form reset in.pdf firstName lastName" resets the fields "firstName" and "lastName" to its default values.
          "pdfcpu form reset in.pdf" resets the whole form of in.pdf.
+         You may supply a mixed list of field ids and field names.
        
    6) Export all form fields as preparation for form filling:
          "pdfcpu form export in.pdf" exports field data into a JSON structure written to in.json.
    
    7) Fill a form with data:
          a) Export your form into in.json and edit the field values.
-         b) "pdfcpu form fill in.pdf in.json out.pdf" fills in.pdf with form data from in.json and writes the result to out.pdf.
+         b) Optionally trim down each field to id or name and value(s).
+         c) "pdfcpu form fill in.pdf in.json out.pdf" fills in.pdf with form data from in.json and writes the result to out.pdf.
 
    or
 
    8) Generate a sequence of filled instances of a form:
          a) Export your form to in.json and edit the field values.
             Extend the JSON Array containing the form by using copy & paste and edit the corresponding form data.
-         b) "pdfcpu form multifill in.pdf in.json outDir" creates a separate PDF for each filled form instance in outDir.
+         b) Optionally trim down each field to id or name and value(s).
+         c) "pdfcpu form multifill in.pdf in.json outDir" creates a separate PDF for each filled form instance in outDir.
       or
-         c) Export your form to in.json.
-         d) Create a CSV file holding form instance data where each CSV line corresponds to one form data tuple.
-            The first line identifies fields via id from in.json.
-         e) "pdfcpu form multifill in.pdf in.csv outDir" creates a separate PDF for each filled form instance in outDir.
+         a) Export your form to in.json.
+         b) Create a CSV file holding form instance data where each CSV line corresponds to one form data tuple.
+            The first line identifies fields via id or name from in.json.
+         c) "pdfcpu form multifill in.pdf in.csv outDir" creates a separate PDF for each filled form instance in outDir.
 
    or
 
    9) Generate a sequence of filled instances of a form and merge output:
          a) Export your form to in.json and edit the field values.
             Extend the JSON Array containing the form by using copy & paste and edit the corresponding form data.
-         b) "pdfcpu form multifill -m merge in.pdf in.json outDir" creates a single output PDF in outDir.
+         b) Optionally trim down each field to id or name and value(s).
+         c) "pdfcpu form multifill -m merge in.pdf in.json outDir" creates a single output PDF in outDir.
       or
-         c) Export your form to in.json.
-         d) Create a CSV file holding form instance data where each CSV line corresponds to one form data tuple.
-            The first line identifies fields via id in in.json.
-         e) "pdfcpu form multifill -m merge in.pdf in.csv outDir" creates a single output PDF in outDir.
+         a) Export your form to in.json.
+         b) Create a CSV file holding form instance data where each CSV line corresponds to one form data tuple.
+            The first line identifies fields via id or name in in.json.
+         c) "pdfcpu form multifill -m merge in.pdf in.csv outDir" creates a single output PDF in outDir.
 
 
    (For syntax and details please refer to pdfcpu/pkg/api/test/form_test.go)`
 
-	usageResize     = "usage: pdfcpu resize [-p(ages) selectedPages] -- [description] inFile [outFile]" + generalFlags
+	usageResize     = "usage: pdfcpu resize [-p(ages) selectedPages] -- description inFile [outFile]" + generalFlags
 	usageLongResize = `Resize existing pages.
 
       pages ... please refer to "pdfcpu selectedpages"
-description ... scalefactor, dimensions, enforce:f/t, formsize(=papersize), bgcolor
-     inFile ... input pdf file
-    outFile ... output pdf file
+description ... scalefactor, dimensions, formsize, enforce, border, bgcolor
+     inFile ... input PDF file
+    outFile ... output PDF file
 
-      Use scalefactor < 1 to shrink pages
-      Use scalefactor > 1 to enlarge pages
-                               
-      Examples: 
+    <description> is a comma separated configuration string containing:
+
+      scalefactor:  Resize page by scale factor.
+                        Use scale < 1 to shrink pages.
+                        Use scale > 1 to enlarge pages.
+
+      formsize:     Resize page to form/paper size eg. A4, Letter, Legal...
+                        Append 'L' to enforce landscape mode. (eg. A3L)
+                        Append 'P' to enforce portrait mode. (eg. A4P, TabloidP)
+                        Please refer to "pdfcpu paper" for a comprehensive list of defined paper sizes.
+                        "papersize" is also accepted.
+
+      dimensions:   Resize page to custom dimensions.
+                        (width height) in given display unit eg. "400 200"
+
+      enforce:      if dimensions set only, enforce orientation (on/off, true/false, t/f).
+
+      border:       if dimensions set only, draw content region border (on/off, true/false, t/f).
+
+      bgcolor:      if dimensions set only, background color value for unused page regions.
+   
+      
+   Examples: 
 
          pdfcpu resize "scale:2" in.pdf out.pdf
             Enlarge pages by doubling the page dimensions, keep orientation.
@@ -1127,5 +1168,158 @@ description ... scalefactor, dimensions, enforce:f/t, formsize(=papersize), bgco
 
          pdfcpu resize "dim:400 200, enforce:true" in.pdf out.pdf
             Resize pages to 400 x 200 points, enforce orientation.
+`
+	usagePoster     = "usage: pdfcpu poster [-p(ages) selectedPages] -- description inFile outDir [outFileName]" + generalFlags
+	usageLongPoster = `Create a poster using paper size.
+
+   pages       ... Please refer to "pdfcpu selectedpages"
+   description ... formsize(=papersize), dimensions, scalefactor, margin, bgcolor, border
+   inFile      ... input PDF file
+   outDir      ... output directory
+   outFileName ... output file name
+
+   Optionally scale up your page dimensions then define the poster grid tile size via form size or dimensions.
+
+   <description> is a comma separated configuration string containing:
+
+      scalefactor:  Enlarge page by scale factor > 1.
+
+      formsize:     Posterize using tiles with form/paper size eg. A4, Letter, Legal...
+                        Append 'L' to enforce landscape mode. (eg. A3L)
+                        Append 'P' to enforce portrait mode. (eg. A4P, TabloidP)
+                        Please refer to "pdfcpu paper" for a comprehensive list of defined paper sizes.
+                        "papersize" is also accepted.
+
+      dimensions:   Posterize using tiles with custom dimensions.
+                        (width height) in given display unit eg. "400 200"
+
+      margin:       Apply margin / glue area (float >= 0 in given display unit)
+
+      bgcolor:      color value for visualization of margin / glue area.
+
+      border:       if margin set, draw content region border (on/off, true/false, t/f) 
+   
+   
+   Examples:
+
+         pdfcpu poster "f:A4" in.pdf outDir
+            Page format is A2, the printer supports A4.
+            Generate a poster(A2) via a corresponding 2x2 grid of A4 pages.
+         
+         pdfcpu poster "f:A4, scale:2.0" in.pdf outDir
+            Page format is A2, the printer supports A4.
+            Generate a poster(A0) via a corresponding 4x4 grid of A4 pages.
+
+         pdfcpu poster -u cm -- "dim:15 10, margin:1, bgcol:DarkGray, border:on" in.pdf outDir
+            Generate a poster via a corresponding grid with cell size 15x10 cm and provide a glue area of 1 cm.
+            
+   See also the related commands: ndown, cut`
+
+	usageNDown     = "usage: pdfcpu ndown [-p(ages) selectedPages] -- [description] n inFile outDir [outFileName]" + generalFlags
+	usageLongNDown = `Cut selected page into n pages symmetrically.
+
+   pages       ... Please refer to "pdfcpu selectedpages"
+   description ... margin, bgcolor, border
+   n           ... the n-Down value (see below for details)
+   inFile      ... input PDF file
+   outDir      ... output directory
+   outFileName ... output file name
+
+   <description> is a comma separated configuration string containing:
+
+      margin:       Apply margin / glue area (float >= 0 in given display unit)
+
+      bgcolor:      color value for visualization of margin / glue area.
+
+      border:       if margin set, draw content region border (on/off, true/false, t/f) 
+    
+
+                                  grid Eg. 
+   Supported values for n: 2 ...  1x2  A1 -> 2 x A2
+                           3 ...  1x3       
+                           4 ...  2x2  A1 -> 4 x A3
+                           8 ...  2x4  A1 -> 8 x A4
+                           9 ...  3x3
+                          12 ...  3x4      
+                          16 ...  4x4  A1 -> 16 x A5
+
+
+   Examples:
+
+         pdfcpu ndown 2 in.pdf outDir
+            Page format is A2, the printer supports A3.
+            Quick cut page into 2 equally sized pages.
+
+         pdfcpu ndown 4 in.pdf outDir
+            Page format is A2, the printer supports A4.
+            Quick cut page into 4 equally (A4) sized pages.
+
+         pdfcpu ndown -u cm -- "margin:1, bgcol:DarkGray, border:on" 4 in.pdf outDir
+            Page format is A2, the printer supports A4.
+            Quick cut page into 4 equally (A4) sized pages and provide a glue area of 1 cm.
+            
+   See also the related commands: poster, cut`
+
+	usageCut     = "usage: pdfcpu cut [-p(ages) selectedPages] -- description inFile outDir [outFileName]" + generalFlags
+	usageLongCut = `Custom cut pages horizontally or vertically.
+
+   pages       ... Please refer to "pdfcpu selectedpages"
+   description ... horizontal, vertical, margin, bgcolor, border
+   inFile      ... input PDF file
+   outDir      ... output directory
+   outFileName ... output file name
+
+   Fine grained custom page cutting.
+   Apply any number of horizontal or vertical page cuts.
+
+   <description> is a comma separated configuration string containing:
+
+      horizontal:   Apply horizontal page cuts at height fraction (origin top left corner) 
+                    A sequence of fractions separated by white space.
+
+      vertical:     Apply vertical page cuts at width fraction (origin top left corner)
+                    A sequence of fractions separated by white space.
+
+      margin:       Apply margin / glue area (float >= 0 in given display unit)
+
+      bgcolor:      color value for visualization of margin / glue area.
+              
+      border:       if margin set, draw content region border (on/off, true/false, t/f) 
+    
+   
+   Examples:
+
+         pdfcpu cut -- "hor:.25" inFile outDir
+            Apply a horizontal page cut at 0.25*height
+            Results in 2 PDF pages.
+
+         pdfcpu cut -- "hor:.25, vert:.75" inFile outDir
+            Apply a horizontal page cut at 0.25*height
+            Apply a vertical page cut at 0.75*width
+
+         pdfcpu cut -- "hor:.33 .66" inFile outDir
+            Has the same effect as: pdfcpu ndown 3 in.pdf outDir
+
+         pdfcpu cut -- "hor:.5, ver:.5" inFile outDir
+            Has the same effect as: pdfcpu ndown 4 in.pdf outDir
+            
+   See also the related commands: poster, ndown`
+
+	usageBookmarksList   = "pdfcpu bookmarks list   inFile"
+	usageBookmarksImport = "pdfcpu bookmarks import [-r(eplace)] inFile inFileJSON [outFile]"
+	usageBookmarksExport = "pdfcpu bookmarks export inFile [outFileJSON]"
+	usageBookmarksRemove = "pdfcpu bookmarks remove inFile [outFile]"
+
+	usageBookmarks = "usage: " + usageBookmarksList +
+		"\n       " + usageBookmarksImport +
+		"\n       " + usageBookmarksExport +
+		"\n       " + usageBookmarksRemove + generalFlags
+
+	usageLongBookmarks = `Manage bookmarks.
+
+      inFile      ... input PDF file
+      inFileJSON  ... input JSON file
+      outFile     ... output PDF file
+      outFileJSON ... output PDF file
 `
 )

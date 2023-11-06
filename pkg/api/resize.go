@@ -32,19 +32,22 @@ func Resize(rs io.ReadSeeker, w io.Writer, selectedPages []string, resize *model
 	if rs == nil {
 		return errors.New("pdfcpu: Resize: missing rs")
 	}
+
 	if conf == nil {
 		conf = model.NewDefaultConfiguration()
 	}
 	conf.Cmd = model.RESIZE
 
-	ctx, _, _, _, err := readValidateAndOptimize(rs, conf, time.Now())
+	ctx, _, _, _, err := ReadValidateAndOptimize(rs, conf, time.Now())
 	if err != nil {
 		return err
 	}
+
 	if err := ctx.EnsurePageCount(); err != nil {
 		return err
 	}
-	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true)
+
+	pages, err := PagesForPageSelection(ctx.PageCount, selectedPages, true, true)
 	if err != nil {
 		return err
 	}
@@ -64,14 +67,16 @@ func Resize(rs io.ReadSeeker, w io.Writer, selectedPages []string, resize *model
 
 // ResizeFile applies resizeConf for selected pages of inFile and writes result to outFile.
 func ResizeFile(inFile, outFile string, selectedPages []string, resize *model.Resize, conf *model.Configuration) error {
-	log.CLI.Printf("resizing %s\n", inFile)
+	if log.CLIEnabled() {
+		log.CLI.Printf("resizing %s\n", inFile)
+	}
 
 	tmpFile := inFile + ".tmp"
 	if outFile != "" && inFile != outFile {
 		tmpFile = outFile
-		log.CLI.Printf("writing %s...\n", outFile)
+		logWritingTo(outFile)
 	} else {
-		log.CLI.Printf("writing %s...\n", inFile)
+		logWritingTo(inFile)
 	}
 
 	var (

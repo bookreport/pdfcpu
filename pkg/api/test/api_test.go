@@ -107,7 +107,7 @@ func copyFile(t *testing.T, srcFileName, destFileName string) error {
 
 func imageFileNames(t *testing.T, dir string) []string {
 	t.Helper()
-	fn, err := model.ImageFileNames(dir)
+	fn, err := model.ImageFileNames(dir, types.MB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,17 @@ func TestInfo(t *testing.T) {
 	msg := "TestInfo"
 	inFile := filepath.Join(inDir, "5116.DCT_Filter.pdf")
 
-	if _, err := api.InfoFile(inFile, nil, nil); err != nil {
+	f, err := os.Open(inFile)
+	if err != nil {
 		t.Fatalf("%s: %v\n", msg, err)
+	}
+	defer f.Close()
+
+	info, err := api.PDFInfo(f, inFile, nil, conf)
+	if err != nil {
+		t.Fatalf("%s: %v\n", msg, err)
+	}
+	if info == nil {
+		t.Fatalf("%s: missing Info\n", msg)
 	}
 }

@@ -28,6 +28,7 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/log"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu"
 	"github.com/pdfcpu/pdfcpu/pkg/pdfcpu/model"
+	"github.com/pkg/errors"
 )
 
 type PageSpan struct {
@@ -73,9 +74,7 @@ func writePageSpan(ctx *model.Context, from, thru int, outPath string) error {
 	if err != nil {
 		return err
 	}
-	if log.CLI != nil {
-		log.CLI.Printf("writing %s...\n", outPath)
-	}
+	logWritingTo(outPath)
 	return pdfcpu.WriteReader(outPath, ps.Reader)
 }
 
@@ -85,7 +84,7 @@ func context(rs io.ReadSeeker, conf *model.Configuration) (*model.Context, error
 	}
 	conf.Cmd = model.SPLIT
 
-	ctx, _, _, _, err := readValidateAndOptimize(rs, conf, time.Now())
+	ctx, _, _, _, err := ReadValidateAndOptimize(rs, conf, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +99,7 @@ func context(rs io.ReadSeeker, conf *model.Configuration) (*model.Context, error
 func pageSpansSplitAlongBookmarks(ctx *model.Context) ([]*PageSpan, error) {
 	pss := []*PageSpan{}
 
-	bms, err := pdfcpu.BookmarksForOutline(ctx)
+	bms, err := pdfcpu.Bookmarks(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +154,7 @@ func pageSpans(ctx *model.Context, span int) ([]*PageSpan, error) {
 func writePageSpansSplitAlongBookmarks(ctx *model.Context, outDir string) error {
 	forBookmark := true
 
-	bms, err := pdfcpu.BookmarksForOutline(ctx)
+	bms, err := pdfcpu.Bookmarks(ctx)
 	if err != nil {
 		return err
 	}
@@ -205,6 +204,10 @@ func writePageSpans(ctx *model.Context, span int, outDir, fileName string) error
 // If span == 0 we split along given bookmarks (level 1 only).
 // Default span: 1
 func SplitRaw(rs io.ReadSeeker, span int, conf *model.Configuration) ([]*PageSpan, error) {
+	if rs == nil {
+		return nil, errors.New("pdfcpu: SplitRaw: missing rs")
+	}
+
 	ctx, err := context(rs, conf)
 	if err != nil {
 		return nil, err
@@ -221,6 +224,10 @@ func SplitRaw(rs io.ReadSeeker, span int, conf *model.Configuration) ([]*PageSpa
 // If span == 0 we split along given bookmarks (level 1 only).
 // Default span: 1
 func Split(rs io.ReadSeeker, outDir, fileName string, span int, conf *model.Configuration) error {
+	if rs == nil {
+		return errors.New("pdfcpu: Split: missing rs")
+	}
+
 	ctx, err := context(rs, conf)
 	if err != nil {
 		return err
@@ -241,7 +248,9 @@ func SplitFile(inFile, outDir string, span int, conf *model.Configuration) error
 	if err != nil {
 		return err
 	}
-	log.CLI.Printf("splitting %s to %s/...\n", inFile, outDir)
+	if log.CLIEnabled() {
+		log.CLI.Printf("splitting %s to %s/...\n", inFile, outDir)
+	}
 
 	defer func() {
 		if err != nil {

@@ -22,44 +22,69 @@ import (
 	"github.com/pdfcpu/pdfcpu/pkg/log"
 )
 
-func initCommandMap() {
-	annotsCmdMap := newCommandMap()
+func initAnnotsCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list":   {processListAnnotationsCommand, nil, "", ""},
 		"remove": {processRemoveAnnotationsCommand, nil, "", ""},
 	} {
-		annotsCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	attachCmdMap := newCommandMap()
+func initAttachCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list":    {processListAttachmentsCommand, nil, "", ""},
 		"add":     {processAddAttachmentsCommand, nil, "", ""},
 		"remove":  {processRemoveAttachmentsCommand, nil, "", ""},
 		"extract": {processExtractAttachmentsCommand, nil, "", ""},
 	} {
-		attachCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	boxesCmdMap := newCommandMap()
+func initBookmarksCmdMap() commandMap {
+	m := newCommandMap()
+	for k, v := range map[string]command{
+		"list":   {processListBookmarksCommand, nil, "", ""},
+		"import": {processImportBookmarksCommand, nil, "", ""},
+		"export": {processExportBookmarksCommand, nil, "", ""},
+		"remove": {processRemoveBookmarksCommand, nil, "", ""},
+	} {
+		m.register(k, v)
+	}
+	return m
+}
+
+func initBoxesCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list":   {processListBoxesCommand, nil, "", ""},
 		"add":    {processAddBoxesCommand, nil, "", ""},
 		"remove": {processRemoveBoxesCommand, nil, "", ""},
 	} {
-		boxesCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	fontsCmdMap := newCommandMap()
+func initFontsCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"cheatsheet": {processCreateCheatSheetFontsCommand, nil, "", ""},
 		"install":    {processInstallFontsCommand, nil, "", ""},
 		"list":       {processListFontsCommand, nil, "", ""},
 	} {
-		fontsCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	formCmdMap := newCommandMap()
+func initFormCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list":      {processListFormFieldsCommand, nil, "", ""},
 		"remove":    {processRemoveFormFieldsCommand, nil, "", ""},
@@ -70,83 +95,126 @@ func initCommandMap() {
 		"fill":      {processFillFormCommand, nil, "", ""},
 		"multifill": {processMultiFillFormCommand, nil, "", ""},
 	} {
-		formCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	imagesCmdMap := newCommandMap()
+func initImagesCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list": {processListImagesCommand, nil, "", ""},
 	} {
-		imagesCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	keywordsCmdMap := newCommandMap()
+func initKeywordsCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list":   {processListKeywordsCommand, nil, "", ""},
 		"add":    {processAddKeywordsCommand, nil, "", ""},
 		"remove": {processRemoveKeywordsCommand, nil, "", ""},
 	} {
-		keywordsCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	pagesCmdMap := newCommandMap()
+func initPagesCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"insert": {processInsertPagesCommand, nil, "", ""},
 		"remove": {processRemovePagesCommand, nil, "", ""},
 	} {
-		pagesCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	permissionsCmdMap := newCommandMap()
+func initPermissionsCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list": {processListPermissionsCommand, nil, "", ""},
 		"set":  {processSetPermissionsCommand, nil, "", ""},
 	} {
-		permissionsCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	portfolioCmdMap := newCommandMap()
+func initPortfolioCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list":    {processListAttachmentsCommand, nil, "", ""},
 		"add":     {processAddAttachmentsPortfolioCommand, nil, "", ""},
 		"remove":  {processRemoveAttachmentsCommand, nil, "", ""},
 		"extract": {processExtractAttachmentsCommand, nil, "", ""},
 	} {
-		portfolioCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	propertiesCmdMap := newCommandMap()
+func initPropertiesCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"list":   {processListPropertiesCommand, nil, "", ""},
 		"add":    {processAddPropertiesCommand, nil, "", ""},
 		"remove": {processRemovePropertiesCommand, nil, "", ""},
 	} {
-		propertiesCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	stampCmdMap := newCommandMap()
+func initStampCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"add":    {processAddStampsCommand, nil, "", ""},
 		"remove": {processRemoveStampsCommand, nil, "", ""},
 		"update": {processUpdateStampsCommand, nil, "", ""},
 	} {
-		stampCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
 
-	watermarkCmdMap := newCommandMap()
+func initWatermarkCmdMap() commandMap {
+	m := newCommandMap()
 	for k, v := range map[string]command{
 		"add":    {processAddWatermarksCommand, nil, "", ""},
 		"remove": {processRemoveWatermarksCommand, nil, "", ""},
 		"update": {processUpdateWatermarksCommand, nil, "", ""},
 	} {
-		watermarkCmdMap.register(k, v)
+		m.register(k, v)
 	}
+	return m
+}
+
+func initCommandMap() {
+	annotsCmdMap := initAnnotsCmdMap()
+	attachCmdMap := initAttachCmdMap()
+	bookmarksCmdMap := initBookmarksCmdMap()
+	boxesCmdMap := initBoxesCmdMap()
+	fontsCmdMap := initFontsCmdMap()
+	formCmdMap := initFormCmdMap()
+	imagesCmdMap := initImagesCmdMap()
+	keywordsCmdMap := initKeywordsCmdMap()
+	pagesCmdMap := initPagesCmdMap()
+	permissionsCmdMap := initPermissionsCmdMap()
+	portfolioCmdMap := initPortfolioCmdMap()
+	propertiesCmdMap := initPropertiesCmdMap()
+	stampCmdMap := initStampCmdMap()
+	watermarkCmdMap := initWatermarkCmdMap()
 
 	cmdMap = newCommandMap()
 
 	for k, v := range map[string]command{
 		"annotations":   {nil, annotsCmdMap, usageAnnots, usageLongAnnots},
 		"attachments":   {nil, attachCmdMap, usageAttach, usageLongAttach},
+		"bookmarks":     {nil, bookmarksCmdMap, usageBookmarks, usageLongBookmarks},
 		"booklet":       {processBookletCommand, nil, usageBooklet, usageLongBooklet},
 		"boxes":         {nil, boxesCmdMap, usageBoxes, usageLongBoxes},
 		"changeopw":     {processChangeOwnerPasswordCommand, nil, usageChangeOwnerPW, usageLongChangeOwnerPW},
@@ -155,6 +223,7 @@ func initCommandMap() {
 		"config":        {printConfiguration, nil, usageConfig, usageLongConfig},
 		"create":        {processCreateCommand, nil, usageCreate, usageLongCreate},
 		"crop":          {processCropCommand, nil, usageCrop, usageLongCrop},
+		"cut":           {processCutCommand, nil, usageCut, usageLongCut},
 		"decrypt":       {processDecryptCommand, nil, usageDecrypt, usageLongDecrypt},
 		"dump":          {processDumpCommand, nil, "", ""},
 		"encrypt":       {processEncryptCommand, nil, usageEncrypt, usageLongEncrypt},
@@ -168,12 +237,14 @@ func initCommandMap() {
 		"info":          {processInfoCommand, nil, usageInfo, usageLongInfo},
 		"keywords":      {nil, keywordsCmdMap, usageKeywords, usageLongKeywords},
 		"merge":         {processMergeCommand, nil, usageMerge, usageLongMerge},
+		"ndown":         {processNDownCommand, nil, usageNDown, usageLongNDown},
 		"nup":           {processNUpCommand, nil, usageNUp, usageLongNUp},
 		"optimize":      {processOptimizeCommand, nil, usageOptimize, usageLongOptimize},
 		"pages":         {nil, pagesCmdMap, usagePages, usageLongPages},
 		"paper":         {printPaperSizes, nil, usagePaper, usageLongPaper},
 		"permissions":   {nil, permissionsCmdMap, usagePerm, usageLongPerm},
 		"portfolio":     {nil, portfolioCmdMap, usagePortfolio, usageLongPortfolio},
+		"poster":        {processPosterCommand, nil, usagePoster, usageLongPoster},
 		"properties":    {nil, propertiesCmdMap, usageProperties, usageLongProperties},
 		"resize":        {processResizeCommand, nil, usageResize, usageLongResize},
 		"rotate":        {processRotateCommand, nil, usageRotate, usageLongRotate},
@@ -190,50 +261,63 @@ func initCommandMap() {
 }
 
 func initFlags() {
-	statsUsage := "optimize: create a csv file for stats"
-	flag.StringVar(&fileStats, "stats", "", statsUsage)
 
-	modeUsage := "validate: strict|relaxed; extract: image|font|content|page|meta; encrypt: rc4|aes, stamp:text|image/pdf"
-	flag.StringVar(&mode, "mode", "", modeUsage)
-	flag.StringVar(&mode, "m", "", modeUsage)
-
-	keyUsage := "encrypt: 40|128|256"
-	flag.StringVar(&key, "key", "256", keyUsage)
-	flag.StringVar(&key, "k", "256", keyUsage)
-
-	permUsage := "encrypt, perm set: none|all"
-	flag.StringVar(&perm, "perm", "none", permUsage)
-
-	unitUsage := "info: po|in|cm|mm"
-	flag.StringVar(&unit, "unit", "", unitUsage)
-	flag.StringVar(&unit, "u", "", unitUsage)
-
-	selectedPagesUsage := "a comma separated list of pages or page ranges, see pdfcpu selectedpages"
-	flag.StringVar(&selectedPages, "pages", "", selectedPagesUsage)
-	flag.StringVar(&selectedPages, "p", "", selectedPagesUsage)
-
-	flag.BoolVar(&quiet, "quiet", false, "")
-	flag.BoolVar(&quiet, "q", false, "")
-
-	sortUsage := "sort files before merging"
-	flag.BoolVar(&sorted, "sort", false, sortUsage)
-	flag.BoolVar(&sorted, "s", false, sortUsage)
-
-	flag.BoolVar(&verbose, "verbose", false, "")
-	flag.BoolVar(&verbose, "v", false, "")
-	flag.BoolVar(&veryVerbose, "vv", false, "")
-
-	linksUsage := "check for broken links"
-	flag.BoolVar(&links, "links", false, linksUsage)
-	flag.BoolVar(&links, "l", false, linksUsage)
-
-	flag.StringVar(&upw, "upw", "", "user password")
-	flag.StringVar(&opw, "opw", "", "owner password")
+	bookmarksUsage := "create bookmarks while merging"
+	flag.BoolVar(&bookmarks, "bookmarks", true, bookmarksUsage)
+	flag.BoolVar(&bookmarks, "b", true, bookmarksUsage)
 
 	confUsage := "the config directory path | skip | none"
 	flag.StringVar(&conf, "config", "", confUsage)
 	flag.StringVar(&conf, "conf", "", confUsage)
 	flag.StringVar(&conf, "c", "", confUsage)
+
+	jsonUsage := "produce JSON output"
+	flag.BoolVar(&json, "json", false, jsonUsage)
+	flag.BoolVar(&json, "j", false, jsonUsage)
+
+	keyUsage := "encrypt: 40|128|256"
+	flag.StringVar(&key, "key", "256", keyUsage)
+	flag.StringVar(&key, "k", "256", keyUsage)
+
+	linksUsage := "check for broken links"
+	flag.BoolVar(&links, "links", false, linksUsage)
+	flag.BoolVar(&links, "l", false, linksUsage)
+
+	modeUsage := "validate: strict|relaxed; extract: image|font|content|page|meta; encrypt: rc4|aes, stamp:text|image/pdf"
+	flag.StringVar(&mode, "mode", "", modeUsage)
+	flag.StringVar(&mode, "m", "", modeUsage)
+
+	selectedPagesUsage := "a comma separated list of pages or page ranges, see pdfcpu selectedpages"
+	flag.StringVar(&selectedPages, "pages", "", selectedPagesUsage)
+	flag.StringVar(&selectedPages, "p", "", selectedPagesUsage)
+
+	permUsage := "encrypt, perm set: none|all"
+	flag.StringVar(&perm, "perm", "none", permUsage)
+
+	flag.BoolVar(&quiet, "quiet", false, "")
+	flag.BoolVar(&quiet, "q", false, "")
+
+	replaceUsage := "replace existing bookmarks"
+	flag.BoolVar(&replaceBookmarks, "replace", false, replaceUsage)
+	flag.BoolVar(&replaceBookmarks, "r", false, replaceUsage)
+
+	sortUsage := "sort files before merging"
+	flag.BoolVar(&sorted, "sort", false, sortUsage)
+	flag.BoolVar(&sorted, "s", false, sortUsage)
+
+	statsUsage := "optimize: create a csv file for stats"
+	flag.StringVar(&fileStats, "stats", "", statsUsage)
+
+	unitUsage := "info: po|in|cm|mm"
+	flag.StringVar(&unit, "unit", "", unitUsage)
+	flag.StringVar(&unit, "u", "", unitUsage)
+
+	flag.BoolVar(&verbose, "verbose", false, "")
+	flag.BoolVar(&verbose, "v", false, "")
+	flag.BoolVar(&veryVerbose, "vv", false, "")
+
+	flag.StringVar(&upw, "upw", "", "user password")
+	flag.StringVar(&opw, "opw", "", "owner password")
 }
 
 func initLogging(verbose, veryVerbose bool) {
